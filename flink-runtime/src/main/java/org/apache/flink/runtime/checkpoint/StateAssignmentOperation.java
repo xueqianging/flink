@@ -317,7 +317,7 @@ public class StateAssignmentOperation {
 		}
 	}
 
-	private void reDistributePartitionableStates(
+	public static void reDistributePartitionableStates(
 			List<OperatorState> oldOperatorStates,
 			int newParallelism,
 			List<OperatorID> newOperatorIDs,
@@ -355,7 +355,7 @@ public class StateAssignmentOperation {
 		}
 	}
 
-	private void collectPartionableStates(
+	private static void collectPartionableStates(
 			List<OperatorState> operatorStates,
 			List<List<OperatorStateHandle>> managedOperatorStates,
 			List<List<OperatorStateHandle>> rawOperatorStates) {
