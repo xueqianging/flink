@@ -302,6 +302,13 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	}
 
 	@Override
+	public Stream<N> getNamespaces(K key) {
+		return StreamSupport.stream(spliterator(), false)
+			.filter(entry -> entry.getKey().equals(key))
+			.map(StateEntry::getNamespace);
+	}
+
+	@Override
 	public void put(K key, int keyGroup, N namespace, S state) {
 		put(key, namespace, state);
 	}

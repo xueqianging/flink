@@ -172,6 +172,21 @@ public class MockKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			.map(Map.Entry::getKey);
 	}
 
+	@Override
+	public <N> Stream<N> getNamespaces(String state, K key) {
+		Map<K, Map<Object, Object>> mappings = stateValues.get(state);
+		if (mappings == null) {
+			return Stream.empty();
+		}
+
+		Map<Object, Object> namespaces = mappings.get(key);
+		if (namespaces == null) {
+			return Stream.empty();
+		}
+
+		return namespaces.keySet().stream().map(namespace -> (N)namespace);
+	}
+
 	@Nonnull
 	@Override
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshot(

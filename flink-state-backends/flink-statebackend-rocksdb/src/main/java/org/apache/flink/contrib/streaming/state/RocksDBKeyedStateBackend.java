@@ -368,6 +368,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return targetStream.onClose(iteratorWrapper::close);
 	}
 
+	@Override
+	public <N> Stream<N> getNamespaces(String state, K key) {
+		return null;
+	}
+
 	@VisibleForTesting
 	public ColumnFamilyHandle getColumnFamilyHandle(String state) {
 		Tuple2<ColumnFamilyHandle, ?> columnInfo = kvStateInformation.get(state);

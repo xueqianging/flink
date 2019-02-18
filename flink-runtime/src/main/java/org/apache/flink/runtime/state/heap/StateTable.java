@@ -166,6 +166,8 @@ public abstract class StateTable<K, N, S> implements StateSnapshotRestore {
 
 	public abstract Stream<K> getKeys(N namespace);
 
+	public abstract Stream<N> getNamespaces(K key);
+
 	// Meta data setter / getter and toString -----------------------------------------------------
 
 	public TypeSerializer<S> getStateSerializer() {

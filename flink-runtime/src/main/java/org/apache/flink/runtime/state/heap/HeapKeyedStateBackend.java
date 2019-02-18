@@ -284,6 +284,17 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return table.getKeys(namespace);
 	}
 
+	@Override
+	public <N> Stream<N> getNamespaces(String state, K key) {
+		if (!registeredKVStates.containsKey(state)) {
+			return Stream.empty();
+		}
+
+		final StateSnapshotRestore stateSnapshotRestore = registeredKVStates.get(state);
+		StateTable<K, N, ?> table = (StateTable<K, N, ?>) stateSnapshotRestore;
+		return table.getNamespaces(key);
+	}
+
 	private boolean hasRegisteredState() {
 		return !(registeredKVStates.isEmpty() && registeredPQStates.isEmpty());
 	}

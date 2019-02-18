@@ -52,8 +52,10 @@ public class RegistryAvroDeserializationSchema<T> extends AvroDeserializationSch
 	 * @param schemaCoderProvider schema provider that allows instantiation of {@link SchemaCoder} that will be used for
 	 *                            schema reading
 	 */
-	protected RegistryAvroDeserializationSchema(Class<T> recordClazz, @Nullable Schema reader,
-			SchemaCoder.SchemaCoderProvider schemaCoderProvider) {
+	protected RegistryAvroDeserializationSchema(
+		Class<T> recordClazz,
+		@Nullable Schema reader,
+		SchemaCoder.SchemaCoderProvider schemaCoderProvider) {
 		super(recordClazz, reader);
 		this.schemaCoderProvider = schemaCoderProvider;
 		this.schemaCoder = schemaCoderProvider.get();

@@ -66,6 +66,8 @@ public interface KeyedStateBackend<K>
 	 */
 	<N> Stream<K> getKeys(String state, N namespace);
 
+	<N> Stream<N> getNamespaces(String state, K key);
+
 	/**
 	 * Creates or retrieves a keyed state backed by this state backend.
 	 *

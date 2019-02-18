@@ -184,6 +184,15 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 			.flatMap(namespaceSate -> namespaceSate.keySet().stream());
 	}
 
+	@Override
+	public Stream<N> getNamespaces(K key) {
+		return Arrays.stream(state)
+			.filter(Objects::nonNull)
+			.flatMap(namespaces -> namespaces.entrySet().stream())
+			.filter(entry -> entry.getValue().containsKey(key))
+			.map(Map.Entry::getKey);
+	}
+
 	// ------------------------------------------------------------------------
 
 	private boolean containsKey(K key, int keyGroupIndex, N namespace) {

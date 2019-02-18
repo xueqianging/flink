@@ -20,13 +20,12 @@ package org.apache.flink.streaming.runtime.operators.windowing;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.state.AppendingState;
-import org.apache.flink.api.common.state.ListState;
-import org.apache.flink.api.common.state.StateDescriptor;
+import org.apache.flink.api.common.state.*;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.state.internal.InternalListState;
+import org.apache.flink.shaded.guava18.com.google.common.base.Function;
 import org.apache.flink.streaming.api.operators.InternalTimer;
 import org.apache.flink.streaming.api.windowing.assigners.MergingWindowAssigner;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
@@ -38,7 +37,6 @@ import org.apache.flink.streaming.runtime.operators.windowing.functions.Internal
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.util.OutputTag;
 
-import org.apache.flink.shaded.guava18.com.google.common.base.Function;
 import org.apache.flink.shaded.guava18.com.google.common.collect.FluentIterable;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Iterables;
 
