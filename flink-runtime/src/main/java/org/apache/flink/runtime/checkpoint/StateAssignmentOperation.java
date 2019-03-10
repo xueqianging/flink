@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.checkpoint;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
@@ -318,8 +317,7 @@ public class StateAssignmentOperation {
 		}
 	}
 
-	@VisibleForTesting
-	static void reDistributePartitionableStates(
+	public static void reDistributePartitionableStates(
 			List<OperatorState> oldOperatorStates,
 			int newParallelism,
 			List<OperatorID> newOperatorIDs,
