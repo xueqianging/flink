@@ -22,13 +22,22 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.connectors.savepoint.output.OperatorStateReducer;
 import org.apache.flink.connectors.savepoint.output.OperatorSubtaskStateReducer;
 import org.apache.flink.connectors.savepoint.output.SavepointOutputFormat;
+import org.apache.flink.connectors.savepoint.runtime.SavepointLoader;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.runtime.checkpoint.MasterState;
 import org.apache.flink.runtime.checkpoint.OperatorState;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.StateBackend;
 
+import java.io.IOException;
 import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 
 /**
  * A {@link Savepoint} is a collection of operator states that can be used to supply initial state
@@ -41,6 +50,10 @@ public class Savepoint {
 
 	private final Map<String, Operator> operatorsByUid;
 
+	private final Map<OperatorID, OperatorState> operatorStateById;
+
+	private final Collection<MasterState> masterStates;
+
 	/**
 	 * Creates a new savepoint.
 	 *
@@ -49,12 +62,49 @@ public class Savepoint {
 	 * @return A new savepoint.
 	 */
 	public static Savepoint create(StateBackend stateBackend, int maxParallelism) {
-		return new Savepoint(stateBackend, maxParallelism);
+		return new Savepoint(stateBackend, maxParallelism, Collections.emptyMap(), Collections.emptyList());
 	}
 
-	private Savepoint(StateBackend stateBackend, int maxParallelism) {
+	/**
+	 * Creates a new savepoint based on an existing savepoint. Useful if you want to modify or extend
+	 * the state of an existing application.
+	 *
+	 * <p><b>IMPORTANT</b> State is shared between savepoints by copying pointers, no deep copy is
+	 * performed. If two savepoints share operators then one cannot be discarded without corrupting
+	 * the other.
+	 *
+	 * @param stateBackend The state backend of the savepoint used for keyed state.
+	 * @param savepointPath The path to an existing savepoint.
+	 * @return A new savepoint.
+	 * @throws IOException Thrown, if the path cannot be resolved, the file system not accessed, or
+	 *     the path points to a location that does not seem to be a savepoint.
+	 */
+	public static Savepoint create(StateBackend stateBackend, String savepointPath) throws IOException {
+		org.apache.flink.runtime.checkpoint.savepoint.Savepoint savepoint = SavepointLoader
+			.loadSavepoint(savepointPath, Savepoint.class.getClassLoader());
+
+		Collection<MasterState> masterStates = savepoint.getMasterStates();
+
+		Map<OperatorID, OperatorState> oldOperators = savepoint
+			.getOperatorStates()
+			.stream()
+			.collect(Collectors.toMap(OperatorState::getOperatorID, UnaryOperator.identity()));
+
+		int maxParallelism = oldOperators
+			.values()
+			.stream()
+			.map(OperatorState::getMaxParallelism)
+			.max(Comparator.naturalOrder())
+			.orElseThrow(() -> new RuntimeException("Savepoints must contain at least one operator"));
+
+		return new Savepoint(stateBackend, maxParallelism, oldOperators, masterStates);
+	}
+
+	private Savepoint(StateBackend stateBackend, int maxParallelism, Map<OperatorID, OperatorState> operatorStateById, Collection<MasterState> masterStates) {
 		this.stateBackend = stateBackend;
 		this.maxParallelism = maxParallelism;
+		this.operatorStateById = operatorStateById;
+		this.masterStates = masterStates;
 
 		this.operatorsByUid = new HashMap<>();
 	}
@@ -111,8 +161,9 @@ public class Savepoint {
 			.stream()
 			.map(entry -> getOperatorStates(entry.getKey(), entry.getValue(), savepointPath))
 			.reduce(DataSet::union)
+			.map(this::addExistingOperatorState)
 			.orElseThrow(() -> new IllegalStateException("Savepoints must contain at least one operator"))
-			.reduceGroup(new OperatorStateReducer())
+			.reduceGroup(new OperatorStateReducer(masterStates))
 			.output(new SavepointOutputFormat(savepointPath));
 	}
 
@@ -122,4 +173,15 @@ public class Savepoint {
 			.reduceGroup(new OperatorSubtaskStateReducer(uid, maxParallelism));
 	}
 
+	private DataSet<OperatorState> addExistingOperatorState(DataSet<OperatorState> newOperators) {
+		if (operatorStateById.isEmpty()) {
+			return newOperators;
+		} else {
+			DataSet<OperatorState> existingOperators = newOperators
+				.getExecutionEnvironment()
+				.fromCollection(operatorStateById.values());
+
+			return newOperators.union(existingOperators);
+		}
+	}
 }

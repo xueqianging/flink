@@ -19,6 +19,9 @@
 package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.common.functions.RichMapFunction;
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.Types;
@@ -27,12 +30,18 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.KeyedProcessWriterFunction;
+import org.apache.flink.connectors.savepoint.functions.ProcessWriterFunction;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.flink.util.AbstractID;
@@ -43,8 +52,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -73,10 +85,24 @@ public class SavepointWriterITCase extends AbstractTestBase {
 	}
 
 	@Test
-	public void testStateBootstrap() throws Exception {
+	public void testStateBootstrapAndModification() throws Exception {
 		final String uid = "accounts";
+		final String modify = "numbers";
+
 		final String savepointPath = getTempDirPath(new AbstractID().toHexString());
 
+		bootstrapState(uid, savepointPath);
+
+		validateBootstrap(uid, savepointPath);
+
+		final String modifyPath = getTempDirPath(new AbstractID().toHexString());
+
+		modifySavepoint(modify, savepointPath, modifyPath);
+
+		validateModification(uid, modify, modifyPath);
+	}
+
+	private void bootstrapState(String uid, String savepointPath) throws Exception {
 		ExecutionEnvironment bEnv = ExecutionEnvironment.getExecutionEnvironment();
 
 		DataSet<Account> data = bEnv.fromCollection(accounts);
@@ -93,7 +119,9 @@ public class SavepointWriterITCase extends AbstractTestBase {
 			.write(savepointPath);
 
 		bEnv.execute("Bootstrap");
+	}
 
+	private void validateBootstrap(String uid, String savepointPath) throws org.apache.flink.client.program.ProgramInvocationException {
 		StreamExecutionEnvironment sEnv = StreamExecutionEnvironment.getExecutionEnvironment();
 		sEnv.setStateBackend(backend);
 
@@ -104,6 +132,51 @@ public class SavepointWriterITCase extends AbstractTestBase {
 			.flatMap(new UpdateAndGetAccount())
 			.uid(uid)
 			.addSink(new CollectSink());
+
+		JobGraph jobGraph = sEnv.getStreamGraph().getJobGraph();
+		jobGraph.setSavepointRestoreSettings(SavepointRestoreSettings.forPath(savepointPath, true));
+
+		ClusterClient<?> client = miniClusterResource.getClusterClient();
+		client.submitJob(jobGraph, SavepointWriterITCase.class.getClassLoader());
+
+		Assert.assertEquals("Unexpected output", 3, CollectSink.accountList.size());
+	}
+
+	private void modifySavepoint(String modify, String savepointPath, String modifyPath) throws Exception {
+		ExecutionEnvironment bEnv = ExecutionEnvironment.getExecutionEnvironment();
+
+		DataSet<Integer> data = bEnv.fromElements(1, 2, 3);
+
+		Operator operator = Operator
+			.fromDataSet(data)
+			.process(new ModifyProcessFunction());
+
+		Savepoint
+			.create(backend, savepointPath)
+			.withOperator(modify, operator)
+			.write(modifyPath);
+
+		bEnv.execute("Modifying");
+	}
+
+	private void validateModification(String uid, String modify, String savepointPath) throws org.apache.flink.client.program.ProgramInvocationException {
+		StreamExecutionEnvironment sEnv = StreamExecutionEnvironment.getExecutionEnvironment();
+		sEnv.setStateBackend(backend);
+
+		CollectSink.accountList.clear();
+
+		DataStream<Account> stream = sEnv.fromCollection(accounts)
+			.keyBy(acc -> acc.id)
+			.flatMap(new UpdateAndGetAccount())
+			.uid(uid);
+
+		stream.addSink(new CollectSink());
+
+		stream
+			.map(acc -> acc.id)
+			.map(new StatefulOperator())
+			.uid(modify)
+			.addSink(new DiscardingSink<>());
 
 		JobGraph jobGraph = sEnv.getStreamGraph().getJobGraph();
 		jobGraph.setSavepointRestoreSettings(SavepointRestoreSettings.forPath(savepointPath, true));
@@ -186,6 +259,84 @@ public class SavepointWriterITCase extends AbstractTestBase {
 	}
 
 	/**
+	 * A bootstrap function.
+	 */
+	public static class ModifyProcessFunction extends ProcessWriterFunction<Integer> {
+		List<Integer> numbers;
+
+		ListState<Integer> state;
+
+		@Override
+		public void open(Configuration parameters) throws Exception {
+			numbers = new ArrayList<>();
+		}
+
+		@Override
+		public void processElement(Integer value, Context ctx) throws Exception {
+			numbers.add(value);
+		}
+
+		@Override
+		public void snapshotState(FunctionSnapshotContext context) throws Exception {
+			state.clear();
+			state.addAll(numbers);
+		}
+
+		@Override
+		public void initializeState(FunctionInitializationContext context) throws Exception {
+			state = context.getOperatorStateStore().getUnionListState(
+				new ListStateDescriptor<>("numbers", Types.INT)
+			);
+		}
+	}
+
+	/**
+	 * A streaming function bootstrapped off the state.
+	 */
+	public static class StatefulOperator extends RichMapFunction<Integer, Integer> implements CheckpointedFunction {
+		List<Integer> numbers;
+
+		ListState<Integer> state;
+
+		@Override
+		public void open(Configuration parameters) throws Exception {
+			numbers = new ArrayList<>();
+		}
+
+		@Override
+		public void snapshotState(FunctionSnapshotContext context) throws Exception {
+			state.clear();
+			state.addAll(numbers);
+		}
+
+		@Override
+		public void initializeState(FunctionInitializationContext context) throws Exception {
+			state = context.getOperatorStateStore().getUnionListState(
+				new ListStateDescriptor<>("numbers", Types.INT)
+			);
+
+			if (context.isRestored()) {
+				Set<Integer> expected = new HashSet<>();
+				expected.add(1);
+				expected.add(2);
+				expected.add(3);
+
+				for (Integer number : state.get()) {
+					Assert.assertTrue("Duplicate state", expected.contains(number));
+					expected.remove(number);
+				}
+
+				Assert.assertTrue("Failed to bootstrap all state elements: " + Arrays.toString(expected.toArray()), expected.isEmpty());
+			}
+		}
+
+		@Override
+		public Integer map(Integer value) throws Exception {
+			return null;
+		}
+	}
+
+	/**
 	 * A simple collections sink.
 	 */
 	public static class CollectSink implements SinkFunction<Account> {
@@ -197,4 +348,3 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		}
 	}
 }
-

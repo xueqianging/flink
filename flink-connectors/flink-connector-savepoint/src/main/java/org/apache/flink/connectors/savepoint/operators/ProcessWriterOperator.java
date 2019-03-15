@@ -44,7 +44,8 @@ public class ProcessWriterOperator<IN>
 	}
 
 	@Override
-	public void open() {
+	public void open() throws Exception {
+		super.open();
 		context = new ContextImpl(getProcessingTimeService());
 	}
 
