@@ -32,6 +32,7 @@ import org.apache.flink.util.Preconditions;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
@@ -223,6 +224,33 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N>, 
 	@Override
 	public void deleteEventTimeTimer(N namespace, long time) {
 		eventTimeTimersQueue.remove(new TimerHeapInternalTimer<>(time, (K) keyContext.getCurrentKey(), namespace));
+	}
+
+	@Override
+	public Set<Long> registeredEventTimeTimers(N namespace) {
+		return registeredTimers(namespace, eventTimeTimersQueue);
+	}
+
+	@Override
+	public Set<Long> registeredProcessingTimeTimers(N namespace) {
+		return registeredTimers(namespace, processingTimeTimersQueue);
+	}
+
+	// TODO this is very inefficient
+	private Set<Long> registeredTimers(N namespace, KeyGroupedInternalPriorityQueue<TimerHeapInternalTimer<K, N>> queue) {
+		Set<Long> timers = new HashSet<>();
+		try (final CloseableIterator<TimerHeapInternalTimer<K, N>> iterator = queue.iterator()) {
+			while (iterator.hasNext()) {
+				final TimerHeapInternalTimer<K, N> timer = iterator.next();
+				if (timer.getKey().equals(keyContext.getCurrentKey()) && timer.getNamespace().equals(namespace)) {
+					timers.add(timer.getTimestamp());
+				}
+			}
+		} catch (Exception e) {
+			throw new FlinkRuntimeException("Exception when closing iterator.", e);
+		}
+
+		return timers;
 	}
 
 	@Override

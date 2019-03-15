@@ -111,7 +111,7 @@ public class InternalTimeServiceManager<K> {
 		return timerService;
 	}
 
-	Map<String, InternalTimerServiceImpl<K, ?>> getRegisteredTimerServices() {
+	public Map<String, InternalTimerServiceImpl<K, ?>> getRegisteredTimerServices() {
 		return Collections.unmodifiableMap(timerServices);
 	}
 

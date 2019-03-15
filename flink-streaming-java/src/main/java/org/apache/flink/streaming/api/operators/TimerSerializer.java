@@ -60,7 +60,7 @@ public class TimerSerializer<K, N> extends TypeSerializer<TimerHeapInternalTimer
 	/** True iff the serialized type (and composite objects) are immutable. */
 	private final boolean immutableType;
 
-	TimerSerializer(
+	public TimerSerializer(
 		@Nonnull TypeSerializer<K> keySerializer,
 		@Nonnull TypeSerializer<N> namespaceSerializer) {
 		this(

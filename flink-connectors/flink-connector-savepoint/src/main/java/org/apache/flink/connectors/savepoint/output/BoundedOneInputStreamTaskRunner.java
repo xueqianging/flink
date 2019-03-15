@@ -69,7 +69,11 @@ public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunctio
 
 	@Override
 	public void mapPartition(Iterable<IN> values, Collector<Tuple2<Integer, OperatorSubtaskState>> out) throws Exception {
-		SavepointEnvironment env = new SavepointEnvironment(getRuntimeContext(), streamConfig.getConfiguration(), maxParallelism);
+		SavepointEnvironment env = new SavepointEnvironment
+			.Builder(getRuntimeContext(), maxParallelism)
+			.setConfiguration(streamConfig.getConfiguration())
+			.build();
+
 		BoundedOneInputStreamTask<IN, ?> task = new BoundedOneInputStreamTask<>(
 			env,
 			savepointPath,

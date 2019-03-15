@@ -23,10 +23,12 @@ import org.apache.flink.api.common.functions.AbstractRichFunction;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Collector;
 
+import java.util.Set;
+
 /**
  * A function that processes keys from a restored operator
  *
- * <p>For every key {@link #processKey(Object, Collector)} is invoked. This can produce zero or more
+ * <p>For every key {@link #processKey(Object, Context, Collector)} is invoked. This can produce zero or more
  * elements as output.
  *
  * <p><b>NOTE:</b> State descriptors must be eagerly registered in {@code open(Configuration)}. Any
@@ -48,7 +50,7 @@ public abstract class ProcessReaderFunction<K, OUT> extends AbstractRichFunction
 
 	/**
 	 * Initialization method for the function. It is called before {@link #processKey(Object,
-	 * Collector)} and thus suitable for one time setup work.
+	 * Context, Collector)} and thus suitable for one time setup work.
 	 *
 	 * <p>This is the only method that my register state descriptors within a {@code
 	 * ProcessReaderFunction}.
@@ -66,6 +68,26 @@ public abstract class ProcessReaderFunction<K, OUT> extends AbstractRichFunction
 	 * @throws Exception This method may throw exceptions. Throwing an exception will cause the
 	 *     operation to fail and may trigger recovery.
 	 */
-	public abstract void processKey(K key, Collector<OUT> out) throws Exception;
+	public abstract void processKey(K key, Context ctx, Collector<OUT> out) throws Exception;
+
+	/**
+	 * Context that {@link ProcessReaderFunction}'s can use for getting additional data about an input
+	 * record.
+	 *
+	 * <p>The context is only valid for the duration of a {@link
+	 * ProcessReaderFunction#processKey(Object, Context, Collector)}  call. Do not store the context and use
+	 * afterwards!
+	 */
+	public interface Context {
+		/**
+		 * @return All event time timers set for the current key.
+		 */
+		Set<Long> getEventTimeTimers();
+
+		/**
+		 * @return All processing time timers set for the current key.
+		 */
+		Set<Long> getProcessingTimeTimers();
+	}
 }
 

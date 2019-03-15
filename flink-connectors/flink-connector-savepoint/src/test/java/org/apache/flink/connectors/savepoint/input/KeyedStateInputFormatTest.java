@@ -22,21 +22,18 @@ import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.Types;
-import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
 import org.apache.flink.connectors.savepoint.input.splits.KeyGroupRangeInputSplit;
 import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
-import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
-import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
-import org.apache.flink.runtime.state.VoidNamespace;
-import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
+import org.apache.flink.streaming.api.operators.KeyedProcessOperator;
+import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamFlatMap;
 import org.apache.flink.streaming.util.KeyedOneInputStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.MockStreamingRuntimeContext;
@@ -52,6 +49,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Tests for keyed state input format.
@@ -63,7 +61,7 @@ public class KeyedStateInputFormatTest {
 	public void testCreatePartitionedInputSplits() throws Exception {
 		OperatorID operatorID = OperatorIDGenerator.fromUid("uid");
 
-		OperatorSubtaskState state = createOperatorSubtaskState();
+		OperatorSubtaskState state = createOperatorSubtaskState(new StreamFlatMap<>(new StatefulFunction()));
 		OperatorState operatorState = new OperatorState(operatorID, 1, 128);
 		operatorState.putState(0, state);
 
@@ -75,7 +73,7 @@ public class KeyedStateInputFormatTest {
 	public void testMaxParallelismRespected() throws Exception {
 		OperatorID operatorID = OperatorIDGenerator.fromUid("uid");
 
-		OperatorSubtaskState state = createOperatorSubtaskState();
+		OperatorSubtaskState state = createOperatorSubtaskState(new StreamFlatMap<>(new StatefulFunction()));
 		OperatorState operatorState = new OperatorState(operatorID, 1, 128);
 		operatorState.putState(0, state);
 
@@ -84,43 +82,10 @@ public class KeyedStateInputFormatTest {
 	}
 
 	@Test
-	public void testRestoreKeyRangeInputSplit() throws Exception {
-		OperatorID operatorID = OperatorIDGenerator.fromUid("uid");
-
-		OperatorSubtaskState state = createOperatorSubtaskState();
-		OperatorState operatorState = new OperatorState(operatorID, 1, 128);
-		operatorState.putState(0, state);
-
-		KeyGroupRangeInputSplit split = KeyedStateInputFormat.getKeyGroupRangeInputSplits(1, operatorState)[0];
-
-		AbstractKeyedStateBackend<Integer> backend =
-			KeyedStateInputFormat.createAndRestoreKeyedStateBackend(
-				new DummyEnvironment(),
-				new MemoryStateBackend(),
-				IntSerializer.INSTANCE,
-				"uid",
-				split,
-				new CloseableRegistry());
-
-		long numKeys = backend.getKeys(stateDescriptor.getName(), VoidNamespace.INSTANCE).count();
-		Assert.assertEquals("Incorrect number of state values restored", 3, numKeys);
-
-		for (int i = 1; i <= 3; i++) {
-			backend.setCurrentKey(i);
-			ValueState<Integer> stateHandle = backend.getPartitionedState(
-				VoidNamespace.INSTANCE,
-				VoidNamespaceSerializer.INSTANCE,
-				stateDescriptor);
-
-			Assert.assertEquals("Incorrect state value restored", Integer.valueOf(i), stateHandle.value());
-		}
-	}
-
-	@Test
 	public void testReadState() throws Exception {
 		OperatorID operatorID = OperatorIDGenerator.fromUid("uid");
 
-		OperatorSubtaskState state = createOperatorSubtaskState();
+		OperatorSubtaskState state = createOperatorSubtaskState(new StreamFlatMap<>(new StatefulFunction()));
 		OperatorState operatorState = new OperatorState(operatorID, 1, 128);
 		operatorState.putState(0, state);
 
@@ -134,10 +99,27 @@ public class KeyedStateInputFormatTest {
 	}
 
 	@Test
+	public void testReadTime() throws Exception {
+		OperatorID operatorID = OperatorIDGenerator.fromUid("uid");
+
+		OperatorSubtaskState state = createOperatorSubtaskState(new KeyedProcessOperator<>(new StatefulFunctionWithTime()));
+		OperatorState operatorState = new OperatorState(operatorID, 1, 128);
+		operatorState.putState(0, state);
+
+		KeyGroupRangeInputSplit split = KeyedStateInputFormat.getKeyGroupRangeInputSplits(1, operatorState)[0];
+
+		ProcessReaderFunction<Integer, Integer> userFunction = new TimeReaderFunction();
+
+		List<Integer> data = readInputSplit(split, userFunction);
+
+		Assert.assertEquals("Incorrect data read from input split", Arrays.asList(1, 2, 3), data);
+	}
+
+	@Test
 	public void testReadMultipleOutputPerKey() throws Exception {
 		OperatorID operatorID = OperatorIDGenerator.fromUid("uid");
 
-		OperatorSubtaskState state = createOperatorSubtaskState();
+		OperatorSubtaskState state = createOperatorSubtaskState(new StreamFlatMap<>(new StatefulFunction()));
 		OperatorState operatorState = new OperatorState(operatorID, 1, 128);
 		operatorState.putState(0, state);
 
@@ -154,7 +136,7 @@ public class KeyedStateInputFormatTest {
 	public void testInvalidProcessReaderFunctionFails() throws Exception {
 		OperatorID operatorID = OperatorIDGenerator.fromUid("uid");
 
-		OperatorSubtaskState state = createOperatorSubtaskState();
+		OperatorSubtaskState state = createOperatorSubtaskState(new StreamFlatMap<>(new StatefulFunction()));
 		OperatorState operatorState = new OperatorState(operatorID, 1, 128);
 		operatorState.putState(0, state);
 
@@ -168,11 +150,13 @@ public class KeyedStateInputFormatTest {
 	}
 
 	@Nonnull
-	private List<Integer> readInputSplit(
-		KeyGroupRangeInputSplit split, ProcessReaderFunction<Integer, Integer> userFunction)
-		throws java.io.IOException {
-		KeyedStateInputFormat<Integer, Integer> format =
-			new KeyedStateInputFormat<>("", "uid", new MemoryStateBackend(), Types.INT, userFunction);
+	private List<Integer> readInputSplit(KeyGroupRangeInputSplit split, ProcessReaderFunction<Integer, Integer> userFunction) throws IOException {
+		KeyedStateInputFormat<Integer, Integer> format = new KeyedStateInputFormat<>(
+			"",
+			"uid",
+			new MemoryStateBackend(),
+			Types.INT,
+			userFunction);
 
 		List<Integer> data = new ArrayList<>();
 
@@ -192,8 +176,7 @@ public class KeyedStateInputFormatTest {
 		return data;
 	}
 
-	private OperatorSubtaskState createOperatorSubtaskState() throws Exception {
-		StreamFlatMap<Integer, Void> operator = new StreamFlatMap<>(new StatefulFunction());
+	private OperatorSubtaskState createOperatorSubtaskState(OneInputStreamOperator<Integer, Void> operator) throws Exception {
 		try (KeyedOneInputStreamOperatorTestHarness<Integer, Integer, Void> testHarness =
 				new KeyedOneInputStreamOperatorTestHarness<>(operator, id -> id, Types.INT, 128, 1, 0)) {
 
@@ -217,7 +200,7 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void processKey(Integer key, Collector<Integer> out) throws Exception {
+		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			out.collect(state.value());
 		}
 	}
@@ -231,7 +214,7 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void processKey(Integer key, Collector<Integer> out) throws Exception {
+		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			out.collect(state.value());
 			out.collect(state.value());
 		}
@@ -245,7 +228,7 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void processKey(Integer key, Collector<Integer> out) throws Exception {
+		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			ValueState<Integer> state = getRuntimeContext().getState(stateDescriptor);
 			out.collect(state.value());
 		}
@@ -264,5 +247,35 @@ public class KeyedStateInputFormatTest {
 			state.update(value);
 		}
 	}
-}
 
+	static class StatefulFunctionWithTime extends KeyedProcessFunction<Integer, Integer, Void> {
+		ValueState<Integer> state;
+
+		@Override
+		public void open(Configuration parameters) {
+			state = getRuntimeContext().getState(stateDescriptor);
+		}
+
+		@Override
+		public void processElement(Integer value, Context ctx, Collector<Void> out) throws Exception {
+			state.update(value);
+			ctx.timerService().registerEventTimeTimer(value);
+		}
+	}
+
+	static class TimeReaderFunction extends ProcessReaderFunction<Integer, Integer> {
+		ValueState<Integer> state;
+
+		@Override
+		public void open(Configuration parameters) {
+			state = getRuntimeContext().getState(stateDescriptor);
+		}
+
+		@Override
+		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
+			Set<Long> timers = ctx.getEventTimeTimers();
+			Assert.assertEquals("Each key should have exactly one timer for key " + key, 1, timers.size());
+			out.collect(timers.iterator().next().intValue());
+		}
+	}
+}

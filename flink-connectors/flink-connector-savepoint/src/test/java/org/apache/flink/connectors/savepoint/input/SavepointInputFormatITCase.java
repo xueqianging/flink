@@ -339,7 +339,7 @@ public class SavepointInputFormatITCase extends AbstractTestBase {
 		}
 
 		@Override
-		public void processKey(Integer key, Collector<Integer> out) throws Exception {
+		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			out.collect(state.value());
 		}
 	}

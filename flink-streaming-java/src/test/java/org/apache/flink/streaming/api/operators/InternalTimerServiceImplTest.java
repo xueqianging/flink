@@ -561,6 +561,76 @@ public class InternalTimerServiceImplTest {
 	}
 
 	@Test
+	public void testQueryEventTimeTimers() throws Exception {
+		@SuppressWarnings("unchecked")
+		Triggerable<Integer, String> mockTriggerable = mock(Triggerable.class);
+
+		TestKeyContext keyContext = new TestKeyContext();
+		TestProcessingTimeService processingTimeService = new TestProcessingTimeService();
+		InternalTimerServiceImpl<Integer, String> timerService =
+			createAndStartInternalTimerService(mockTriggerable, keyContext, processingTimeService, testKeyGroupRange, createQueueFactory());
+
+		int key = getKeyInKeyGroupRange(testKeyGroupRange, maxParallelism);
+
+		keyContext.setCurrentKey(key);
+
+		timerService.registerEventTimeTimer("ciao", 10);
+		timerService.registerEventTimeTimer("ciao", 20);
+
+		timerService.registerEventTimeTimer("hello", 10);
+		timerService.registerEventTimeTimer("hello", 20);
+
+		assertEquals(4, timerService.numEventTimeTimers());
+		assertEquals(2, timerService.numEventTimeTimers("hello"));
+		assertEquals(2, timerService.numEventTimeTimers("ciao"));
+
+		Set<Long> namespace1 = timerService.registeredEventTimeTimers("hello");
+		Assert.assertEquals(2, namespace1.size());
+		Assert.assertTrue(namespace1.contains(10L));
+		Assert.assertTrue(namespace1.contains(20L));
+
+		Set<Long> namespace2 = timerService.registeredEventTimeTimers("ciao");
+		Assert.assertEquals(2, namespace2.size());
+		Assert.assertTrue(namespace2.contains(10L));
+		Assert.assertTrue(namespace2.contains(20L));
+	}
+
+	@Test
+	public void testQueryProcessingTimeTimers() throws Exception {
+		@SuppressWarnings("unchecked")
+		Triggerable<Integer, String> mockTriggerable = mock(Triggerable.class);
+
+		TestKeyContext keyContext = new TestKeyContext();
+		TestProcessingTimeService processingTimeService = new TestProcessingTimeService();
+		InternalTimerServiceImpl<Integer, String> timerService =
+			createAndStartInternalTimerService(mockTriggerable, keyContext, processingTimeService, testKeyGroupRange, createQueueFactory());
+
+		int key = getKeyInKeyGroupRange(testKeyGroupRange, maxParallelism);
+
+		keyContext.setCurrentKey(key);
+
+		timerService.registerProcessingTimeTimer("ciao", 10);
+		timerService.registerProcessingTimeTimer("ciao", 20);
+
+		timerService.registerProcessingTimeTimer("hello", 10);
+		timerService.registerProcessingTimeTimer("hello", 20);
+
+		assertEquals(4, timerService.numProcessingTimeTimers());
+		assertEquals(2, timerService.numProcessingTimeTimers("hello"));
+		assertEquals(2, timerService.numProcessingTimeTimers("ciao"));
+
+		Set<Long> namespace1 = timerService.registeredProcessingTimeTimers("hello");
+		Assert.assertEquals(2, namespace1.size());
+		Assert.assertTrue(namespace1.contains(10L));
+		Assert.assertTrue(namespace1.contains(20L));
+
+		Set<Long> namespace2 = timerService.registeredProcessingTimeTimers("ciao");
+		Assert.assertEquals(2, namespace2.size());
+		Assert.assertTrue(namespace2.contains(10L));
+		Assert.assertTrue(namespace2.contains(20L));
+	}
+
+	@Test
 	public void testSnapshotAndRestore() throws Exception {
 		testSnapshotAndRestore(InternalTimerServiceSerializationProxy.VERSION);
 	}

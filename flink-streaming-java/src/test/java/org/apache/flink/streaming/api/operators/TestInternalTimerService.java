@@ -108,6 +108,27 @@ public class TestInternalTimerService<K, N> implements InternalTimerService<N> {
 		}
 	}
 
+	@Override
+	public Set<Long> registeredEventTimeTimers(N namespace) {
+		return registeredTimers(namespace, watermarkTimersQueue);
+	}
+
+	@Override
+	public Set<Long> registeredProcessingTimeTimers(N namespace) {
+		return registeredTimers(namespace, processingTimeTimersQueue);
+	}
+
+	private Set<Long> registeredTimers(N namespace, PriorityQueue<Timer<K, N>> queue) {
+		Set<Long> timers = new HashSet<>();
+		for (Timer<K, N> timer : queue) {
+			if (timer.key.equals(keyContext.getCurrentKey()) && timer.namespace.equals(namespace)) {
+				timers.add(timer.timestamp);
+			}
+		}
+
+		return timers;
+	}
+
 	public Collection<Timer<K, N>> advanceProcessingTime(long time) throws Exception {
 		List<Timer<K, N>> result = new ArrayList<>();
 

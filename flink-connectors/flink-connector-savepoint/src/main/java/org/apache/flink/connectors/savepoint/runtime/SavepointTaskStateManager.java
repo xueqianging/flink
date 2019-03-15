@@ -26,6 +26,7 @@ import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -37,6 +38,14 @@ import javax.annotation.Nullable;
 final class SavepointTaskStateManager implements TaskStateManager {
 	private static final String MSG = "This method should never be called";
 
+	@Nonnull
+	private final PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskState;
+
+	SavepointTaskStateManager(PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskState) {
+		Preconditions.checkNotNull(prioritizedOperatorSubtaskState, "Operator subtask state must not be null");
+		this.prioritizedOperatorSubtaskState = prioritizedOperatorSubtaskState;
+	}
+
 	@Override
 	public void reportTaskStateSnapshots(
 		@Nonnull CheckpointMetaData checkpointMetaData,
@@ -47,7 +56,7 @@ final class SavepointTaskStateManager implements TaskStateManager {
 	@Nonnull
 	@Override
 	public PrioritizedOperatorSubtaskState prioritizedOperatorState(OperatorID operatorID) {
-		return PrioritizedOperatorSubtaskState.emptyNotRestored();
+		return prioritizedOperatorSubtaskState;
 	}
 
 	@Nonnull

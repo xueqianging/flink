@@ -20,6 +20,7 @@ package org.apache.flink.connectors.savepoint.operators;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.connectors.savepoint.functions.KeyedProcessWriterFunction;
+import org.apache.flink.connectors.savepoint.runtime.VoidTriggerable;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.streaming.api.SimpleTimerService;

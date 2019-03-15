@@ -27,29 +27,38 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
 import org.apache.flink.connectors.savepoint.input.splits.KeyGroupRangeInputSplit;
+import org.apache.flink.connectors.savepoint.runtime.NeverFireProcessingTimeService;
 import org.apache.flink.connectors.savepoint.runtime.SavepointEnvironment;
 import org.apache.flink.connectors.savepoint.runtime.SavepointRuntimeContext;
+import org.apache.flink.connectors.savepoint.runtime.VoidTriggerable;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.StateAssignmentOperation;
 import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.DefaultKeyedStateStore;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
-import org.apache.flink.streaming.api.operators.BackendRestorerProcedure;
-
-import org.apache.commons.io.IOUtils;
+import org.apache.flink.runtime.state.VoidNamespace;
+import org.apache.flink.runtime.state.VoidNamespaceSerializer;
+import org.apache.flink.streaming.api.operators.InternalTimeServiceManager;
+import org.apache.flink.streaming.api.operators.InternalTimerService;
+import org.apache.flink.streaming.api.operators.KeyContext;
+import org.apache.flink.streaming.api.operators.StreamOperatorStateContext;
+import org.apache.flink.streaming.api.operators.StreamTaskStateInitializer;
+import org.apache.flink.streaming.api.operators.StreamTaskStateInitializerImpl;
+import org.apache.flink.streaming.api.operators.TimerSerializer;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Input format for reading partitioned state.
@@ -58,7 +67,9 @@ import java.util.List;
  * @param <OUT> The type of the output of the {@link ProcessReaderFunction}.
  */
 @PublicEvolving
-public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, KeyGroupRangeInputSplit> {
+public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, KeyGroupRangeInputSplit> implements KeyContext {
+
+	private static final String USER_TIMERS_NAME = "user-timers";
 
 	private final StateBackend stateBackend;
 
@@ -68,13 +79,15 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 	private transient TypeSerializer<K> keySerializer;
 
-	private transient AbstractKeyedStateBackend<K> restoredBackend;
-
 	private transient CloseableRegistry registry;
 
 	private transient BufferingCollector<OUT> out;
 
 	private transient Iterator<K> keys;
+
+	private transient AbstractKeyedStateBackend<K> keyedStateBackend;
+
+	private transient Context ctx;
 
 	/**
 	 * Creates an input format for reading partitioned state from an operator in a savepoint.
@@ -112,14 +125,24 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 		return mapWithIndex(
 			keyGroups,
-			(keyGroupRange, index) -> createKeyGroupRangeInputSplit(operatorState, maxParallelism, keyGroupRange, index)
+			(keyGroupRange, index) -> createKeyGroupRangeInputSplit(
+				operatorState,
+				maxParallelism,
+				keyGroupRange,
+				index)
 		).toArray(KeyGroupRangeInputSplit[]::new);
 	}
 
-	private static KeyGroupRangeInputSplit createKeyGroupRangeInputSplit(OperatorState operatorState, int maxParallelism, KeyGroupRange keyGroupRange, Integer index) {
-		final List<KeyedStateHandle> handles = StateAssignmentOperation.getManagedKeyedStateHandles(operatorState, keyGroupRange);
+	private static KeyGroupRangeInputSplit createKeyGroupRangeInputSplit(
+		OperatorState operatorState,
+		int maxParallelism,
+		KeyGroupRange keyGroupRange,
+		Integer index) {
 
-		return new KeyGroupRangeInputSplit(handles, keyGroupRange, maxParallelism, index);
+		final List<KeyedStateHandle> managedKeyedState = StateAssignmentOperation.getManagedKeyedStateHandles(operatorState, keyGroupRange);
+		final List<KeyedStateHandle> rawKeyedState = StateAssignmentOperation.getRawKeyedStateHandles(operatorState, keyGroupRange);
+
+		return new KeyGroupRangeInputSplit(managedKeyedState, rawKeyedState, maxParallelism, index);
 	}
 
 	@Override
@@ -134,19 +157,42 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public void open(KeyGroupRangeInputSplit split) throws IOException {
 		registry = new CloseableRegistry();
 
-		final Environment environment = new SavepointEnvironment(getRuntimeContext(), new Configuration(), split.getNumKeyGroups());
-		restoredBackend = createAndRestoreKeyedStateBackend(
+		final Environment environment = new SavepointEnvironment
+			.Builder(getRuntimeContext(), split.getNumKeyGroups())
+			.setSubtaskIndex(split.getSplitNumber())
+			.setPrioritizedOperatorSubtaskState(split.getPrioritizedOperatorSubtaskState())
+			.build();
+
+		StreamTaskStateInitializer initializer = new StreamTaskStateInitializerImpl(
 			environment,
 			stateBackend,
-			keySerializer,
-			getUid(),
-			split,
-			registry);
+			new NeverFireProcessingTimeService());
 
-		final DefaultKeyedStateStore keyedStateStore = new DefaultKeyedStateStore(restoredBackend, getRuntimeContext().getExecutionConfig());
+		StreamOperatorStateContext context;
+		try {
+			context = initializer.streamOperatorStateContext(
+				getOperatorID(),
+				getUid(),
+				this,
+				keySerializer,
+				registry,
+				getRuntimeContext().getMetricGroup());
+		} catch (Exception e) {
+			throw new IOException("Failed to restore state backend", e);
+		}
+
+		InternalTimeServiceManager<K> timeServiceManager = (InternalTimeServiceManager<K>) context.internalTimerServiceManager();
+		TimerSerializer<K, VoidNamespace> timerSerializer = new TimerSerializer<>(keySerializer, VoidNamespaceSerializer.INSTANCE);
+		InternalTimerService<VoidNamespace> timerService = timeServiceManager.getInternalTimerService(USER_TIMERS_NAME, timerSerializer, VoidTriggerable.instance());
+
+		ctx = new Context(timerService);
+
+		keyedStateBackend = (AbstractKeyedStateBackend<K>) context.keyedStateBackend();
+		final DefaultKeyedStateStore keyedStateStore = new DefaultKeyedStateStore(keyedStateBackend, getRuntimeContext().getExecutionConfig());
 		final SavepointRuntimeContext ctx = new SavepointRuntimeContext(getRuntimeContext(), keyedStateStore);
 
 		ctx.enterOpen();
@@ -160,13 +206,11 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		}
 		ctx.exitOpen();
 
-		this.keys = new MultiStateKeyIterator<>(stateDescriptors, restoredBackend);
+		this.keys = new MultiStateKeyIterator<>(stateDescriptors, (AbstractKeyedStateBackend<K>) context.keyedStateBackend());
 	}
 
 	@Override
 	public void close() throws IOException {
-		registry.unregisterCloseable(restoredBackend);
-		restoredBackend.close();
 		registry.close();
 	}
 
@@ -182,10 +226,10 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		}
 
 		final K key = keys.next();
-		restoredBackend.setCurrentKey(key);
+		setCurrentKey(key);
 
 		try {
-			userFunction.processKey(key, out);
+			userFunction.processKey(key, ctx, out);
 		} catch (Exception e) {
 			throw new IOException("User defined function ProcessReaderFunction#processKey threw an exception", e);
 		}
@@ -193,6 +237,17 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		keys.remove();
 
 		return out.next();
+	}
+
+	@Override
+	@SuppressWarnings("unchecked")
+	public void setCurrentKey(Object key) {
+		keyedStateBackend.setCurrentKey((K) key);
+	}
+
+	@Override
+	public Object getCurrentKey() {
+		return keyedStateBackend.getCurrentKey();
 	}
 
 	/**
@@ -206,47 +261,31 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 			Math.min(minNumSplits, operatorState.getMaxParallelism()));
 	}
 
-	@Nonnull
-	@VisibleForTesting
-	static <K> AbstractKeyedStateBackend<K> createAndRestoreKeyedStateBackend(
-		Environment environment,
-		StateBackend stateBackend,
-		TypeSerializer<K> keySerializer,
-		String uid,
-		KeyGroupRangeInputSplit split,
-		CloseableRegistry closeableRegistry)
-		throws IOException {
+	@SuppressWarnings("unchecked")
+	private static class Context implements ProcessReaderFunction.Context {
+		@Nullable
+		private InternalTimerService<VoidNamespace> timerService;
 
-		CloseableRegistry cancelStreamRegistryForRestore = new CloseableRegistry();
-		closeableRegistry.registerCloseable(cancelStreamRegistryForRestore);
+		private Context(@Nullable InternalTimerService<VoidNamespace> timerService) {
+			this.timerService = timerService;
+		}
 
-		BackendRestorerProcedure<AbstractKeyedStateBackend<K>, KeyedStateHandle> backendRestorer =
-			new BackendRestorerProcedure<>(
-				(stateHandles) -> stateBackend.createKeyedStateBackend(
-					environment,
-					environment.getJobID(),
-					uid,
-					keySerializer,
-					split.getNumKeyGroups(),
-					split.getKeyGroupRange(),
-					environment.getTaskKvStateRegistry(),
-					TtlTimeProvider.DEFAULT,
-					UnregisteredMetricGroups.createUnregisteredTaskMetricGroup(),
-					stateHandles,
-					cancelStreamRegistryForRestore
-				),
-				closeableRegistry,
-				uid
-			);
-
-		try {
-			return backendRestorer.createAndRestore(split.getHandles());
-		} catch (Exception e) {
-			throw new IOException("Failed to restore keyed state backend", e);
-		} finally {
-			if (closeableRegistry.unregisterCloseable(cancelStreamRegistryForRestore)) {
-				IOUtils.closeQuietly(cancelStreamRegistryForRestore);
+		@Override
+		public Set<Long> getEventTimeTimers() {
+			if (timerService == null) {
+				return (Set<Long>) Collections.EMPTY_SET;
 			}
+
+			return timerService.registeredEventTimeTimers(VoidNamespace.INSTANCE);
+		}
+
+		@Override
+		public Set<Long> getProcessingTimeTimers() {
+			if (timerService == null) {
+				return (Set<Long>) Collections.EMPTY_SET;
+			}
+
+			return timerService.registeredProcessingTimeTimers(VoidNamespace.INSTANCE);
 		}
 	}
 }

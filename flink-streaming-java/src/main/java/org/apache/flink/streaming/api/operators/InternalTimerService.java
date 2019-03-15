@@ -20,6 +20,8 @@ package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.annotation.Internal;
 
+import java.util.Set;
+
 /**
  * Interface for working with time and timers.
  *
@@ -58,4 +60,16 @@ public interface InternalTimerService<N> {
 	 * Deletes the timer for the given key and namespace.
 	 */
 	void deleteEventTimeTimer(N namespace, long time);
+
+	/**
+	 * Returns the current registered event time timers
+	 * for a particular key / namespace pair.
+	 */
+	Set<Long> registeredEventTimeTimers(N namespace);
+
+	/**
+	 * Returns the current registered processing time timers
+	 * for a particular key / namespace pair.
+	 */
+	Set<Long> registeredProcessingTimeTimers(N namespace);
 }

@@ -28,6 +28,7 @@ import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
+import org.apache.flink.runtime.checkpoint.PrioritizedOperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
@@ -71,6 +72,8 @@ public class SavepointEnvironment implements Environment {
 
 	private final int maxParallelism;
 
+	private final int indexOfSubtask;
+
 	private final TaskKvStateRegistry registry;
 
 	private final TaskStateManager taskStateManager;
@@ -79,15 +82,16 @@ public class SavepointEnvironment implements Environment {
 
 	private final AccumulatorRegistry accumulatorRegistry;
 
-	public SavepointEnvironment(RuntimeContext ctx, Configuration configuration, int maxParallelism) {
+	private SavepointEnvironment(RuntimeContext ctx, Configuration configuration, int maxParallelism, int indexOfSubtask, PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskState) {
 		this.jobID = new JobID();
 		this.vertexID = new JobVertexID();
 		this.attemptID = new ExecutionAttemptID();
 		this.ctx = ctx;
 		this.configuration = configuration;
 		this.maxParallelism = maxParallelism;
+		this.indexOfSubtask = indexOfSubtask;
 		this.registry = new KvStateRegistry().createTaskRegistry(jobID, vertexID);
-		this.taskStateManager = new SavepointTaskStateManager();
+		this.taskStateManager = new SavepointTaskStateManager(prioritizedOperatorSubtaskState);
 		this.ioManager = new IOManagerAsync();
 		this.accumulatorRegistry = new AccumulatorRegistry(jobID, attemptID);
 	}
@@ -137,7 +141,7 @@ public class SavepointEnvironment implements Environment {
 		return new TaskInfo(
 			ctx.getTaskName(),
 			maxParallelism,
-			ctx.getIndexOfThisSubtask(),
+			indexOfSubtask,
 			ctx.getNumberOfParallelSubtasks(),
 			ctx.getAttemptNumber());
 	}
@@ -198,8 +202,7 @@ public class SavepointEnvironment implements Environment {
 	}
 
 	@Override
-	public void acknowledgeCheckpoint(
-		long checkpointId, CheckpointMetrics checkpointMetrics, TaskStateSnapshot subtaskState) {
+	public void acknowledgeCheckpoint(long checkpointId, CheckpointMetrics checkpointMetrics, TaskStateSnapshot subtaskState) {
 		throw new UnsupportedOperationException(MSG);
 	}
 
@@ -236,6 +239,54 @@ public class SavepointEnvironment implements Environment {
 	@Override
 	public TaskEventDispatcher getTaskEventDispatcher() {
 		throw new UnsupportedOperationException(MSG);
+	}
+
+	/**
+	 * {@link SavepointEnvironment} builder.
+	 */
+	public static class Builder {
+		private RuntimeContext ctx;
+
+		private Configuration configuration;
+
+		private int maxParallelism;
+
+		private int indexOfSubtask;
+
+		private PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskState;
+
+		public Builder(RuntimeContext ctx, int maxParallelism) {
+			this.ctx = ctx;
+			this.maxParallelism = maxParallelism;
+
+			this.prioritizedOperatorSubtaskState = PrioritizedOperatorSubtaskState.emptyNotRestored();
+			this.configuration = new Configuration();
+			this.indexOfSubtask = ctx.getIndexOfThisSubtask();
+		}
+
+		public Builder setSubtaskIndex(int indexOfSubtask) {
+			this.indexOfSubtask = indexOfSubtask;
+			return this;
+		}
+
+		public Builder setConfiguration(Configuration configuration) {
+			this.configuration = configuration;
+			return this;
+		}
+
+		public Builder setPrioritizedOperatorSubtaskState(PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskState) {
+			this.prioritizedOperatorSubtaskState = prioritizedOperatorSubtaskState;
+			return this;
+		}
+
+		public SavepointEnvironment build() {
+			return new SavepointEnvironment(
+				ctx,
+				configuration,
+				maxParallelism,
+				indexOfSubtask,
+				prioritizedOperatorSubtaskState);
+		}
 	}
 }
 

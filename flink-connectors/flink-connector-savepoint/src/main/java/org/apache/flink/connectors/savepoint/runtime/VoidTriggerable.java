@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.operators;
+package org.apache.flink.connectors.savepoint.runtime;
 
 import org.apache.flink.streaming.api.operators.InternalTimer;
 import org.apache.flink.streaming.api.operators.Triggerable;
@@ -27,8 +27,8 @@ import org.apache.flink.streaming.api.operators.Triggerable;
  * @param <K> Type of the keys to which timers are scoped.
  * @param <N> Type of the namespace to which timers are scoped.
  */
-final class VoidTriggerable<K, N> implements Triggerable<K, N> {
-	static <K, N> VoidTriggerable<K, N> instance() {
+public final class VoidTriggerable<K, N> implements Triggerable<K, N> {
+	public static <K, N> VoidTriggerable<K, N> instance() {
 		return new VoidTriggerable<>();
 	}
 
