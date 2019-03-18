@@ -16,24 +16,16 @@
  * limitations under the License.
  */
 
-import { Inject, LOCALE_ID, Pipe, PipeTransform } from '@angular/core';
-import { formatDate } from '@angular/common';
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { HumanizeBytesPipe } from 'share/pipes/humanize-bytes.pipe';
+import { HumanizeWatermarkPipe } from 'share/pipes/humanize-watermark.pipe';
+import { HumanizeDurationPipe } from './humanize-duration.pipe';
+import { HumanizeDatePipe } from './humanize-date.pipe';
 
-@Pipe({
-  name: 'humanizeDate'
+@NgModule({
+  imports: [CommonModule],
+  declarations: [HumanizeDurationPipe, HumanizeDatePipe, HumanizeBytesPipe, HumanizeWatermarkPipe],
+  exports: [HumanizeDurationPipe, HumanizeDatePipe, HumanizeBytesPipe, HumanizeWatermarkPipe]
 })
-export class HumanizeDatePipe implements PipeTransform {
-  constructor(@Inject(LOCALE_ID) private locale: string) {
-  }
-
-  transform(value: any, format = 'mediumDate', timezone?: string, locale?: string): string | null | undefined {
-    if (value == null || value === '' || value !== value || value < 0) {
-      return '-';
-    }
-
-    try {
-      return formatDate(value, format, locale || this.locale, timezone);
-    } catch (error) {
-    }
-  }
-}
+export class PipeModule {}
