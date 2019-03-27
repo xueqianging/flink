@@ -31,6 +31,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.TypeSerializerSchemaCompatibility;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.contrib.streaming.state.iterator.RocksStateKeysIterator;
+import org.apache.flink.contrib.streaming.state.iterator.RocksStateNamespaceIterator;
 import org.apache.flink.contrib.streaming.state.snapshot.RocksDBSnapshotStrategyBase;
 import org.apache.flink.contrib.streaming.state.ttl.RocksDbTtlCompactFiltersManager;
 import org.apache.flink.core.fs.CloseableRegistry;
@@ -40,6 +41,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.KeyGroupedInternalPriorityQueue;
 import org.apache.flink.runtime.state.Keyed;
 import org.apache.flink.runtime.state.KeyedStateHandle;
@@ -284,6 +286,37 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			ambiguousKeyPossible, nameSpaceBytes);
 
 		Stream<K> targetStream = StreamSupport.stream(Spliterators.spliteratorUnknownSize(iteratorWrapper, Spliterator.ORDERED), false);
+		return targetStream.onClose(iteratorWrapper::close);
+	}
+
+	@Override
+	@SuppressWarnings("unchecked")
+	public <N> Stream<N> getNamespaces(String state) {
+		RocksDbKvStateInfo columnInfo = kvStateInformation.get(state);
+		if (columnInfo == null || !(columnInfo.metaInfo instanceof RegisteredKeyValueStateBackendMetaInfo)) {
+			return Stream.empty();
+		}
+
+		RegisteredKeyValueStateBackendMetaInfo<N, ?> registeredKeyValueStateBackendMetaInfo =
+			(RegisteredKeyValueStateBackendMetaInfo<N, ?>) columnInfo.metaInfo;
+
+		final int keyGroupId = KeyGroupRangeAssignment.assignToKeyGroup(getCurrentKey(), getNumberOfKeyGroups());
+		final TypeSerializer<N> namespaceSerializer = registeredKeyValueStateBackendMetaInfo.getNamespaceSerializer();
+		boolean ambiguousKeyPossible = RocksDBKeySerializationUtils.isAmbiguousKeyPossible(getKeySerializer(), namespaceSerializer);
+
+		RocksIteratorWrapper iterator = RocksDBOperationUtils.getRocksIterator(db, columnInfo.columnFamilyHandle);
+		RocksStateNamespaceIterator<K, N> iteratorWrapper = new RocksStateNamespaceIterator<>(
+			iterator,
+			state,
+			getCurrentKey(),
+			getKeySerializer(),
+			namespaceSerializer,
+			ambiguousKeyPossible,
+			keyGroupId,
+			getKeyGroupPrefixBytes()
+		);
+
+		Stream<N> targetStream = StreamSupport.stream(Spliterators.spliteratorUnknownSize(iteratorWrapper, Spliterator.ORDERED), false);
 		return targetStream.onClose(iteratorWrapper::close);
 	}
 

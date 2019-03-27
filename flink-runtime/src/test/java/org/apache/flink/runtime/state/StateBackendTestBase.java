@@ -290,6 +290,75 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 	}
 
 	@Test
+	public void testGetNamespaces() throws Exception {
+		final int key1ElementsNum = 1000;
+		final int key2ElementsNum = 1000;
+		String fieldName = "get-keys-test";
+		AbstractKeyedStateBackend<String> backend = createKeyedBackend(StringSerializer.INSTANCE);
+		try {
+			final String key1 = "key1";
+			for (int namespace = 0; namespace < key1ElementsNum; namespace++) {
+				ValueState<String> keyedState1 = backend.getPartitionedState(
+					namespace,
+					IntSerializer.INSTANCE,
+					new ValueStateDescriptor<>(fieldName, StringSerializer.INSTANCE)
+				);
+
+				backend.setCurrentKey(key1);
+				keyedState1.update(key1);
+			}
+
+			final String key2 = "key2";
+			for (int namespace = key1ElementsNum; namespace < key1ElementsNum + key2ElementsNum; namespace++) {
+				ValueState<String> keyedState1 = backend.getPartitionedState(
+					namespace,
+					IntSerializer.INSTANCE,
+					new ValueStateDescriptor<>(fieldName, StringSerializer.INSTANCE)
+				);
+
+				backend.setCurrentKey(key2);
+				keyedState1.update(key2);
+			}
+
+			// valid for key1
+			backend.setCurrentKey(key1);
+			try (Stream<Integer> namespaceStream = backend.getNamespaces(fieldName)) {
+				PrimitiveIterator.OfInt actualIterator = namespaceStream
+					.mapToInt(value -> value)
+					.sorted()
+					.iterator();
+
+				for (int expectedNamespace = 0; expectedNamespace < key1ElementsNum; expectedNamespace++) {
+					assertTrue(actualIterator.hasNext());
+					assertEquals(expectedNamespace, actualIterator.nextInt());
+				}
+
+				assertFalse(actualIterator.hasNext());
+			}
+
+			// valid for namespace2
+			backend.setCurrentKey(key2);
+			try (Stream<Integer> keysStream = backend.getNamespaces(fieldName)) {
+				PrimitiveIterator.OfInt actualIterator = keysStream
+					.mapToInt(value -> value)
+					.sorted()
+					.iterator();
+
+				for (int expectedNamespace = key1ElementsNum; expectedNamespace < key1ElementsNum + key2ElementsNum; expectedNamespace++) {
+					assertTrue(actualIterator.hasNext());
+					assertEquals(expectedNamespace, actualIterator.nextInt());
+				}
+
+				assertFalse(actualIterator.hasNext());
+			}
+		}
+		finally {
+			IOUtils.closeQuietly(backend);
+			backend.dispose();
+		}
+	}
+
+	@Test
 	@SuppressWarnings("unchecked")
 	public void testBackendUsesRegisteredKryoDefaultSerializer() throws Exception {
 		CheckpointStreamFactory streamFactory = createStreamFactory();

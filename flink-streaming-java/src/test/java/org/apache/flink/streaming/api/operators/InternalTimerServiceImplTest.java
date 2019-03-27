@@ -30,6 +30,7 @@ import org.apache.flink.runtime.state.PriorityQueueSetFactory;
 import org.apache.flink.runtime.state.heap.HeapPriorityQueueSetFactory;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.tasks.TestProcessingTimeService;
+import org.apache.flink.util.function.BiConsumerWithException;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -561,7 +562,7 @@ public class InternalTimerServiceImplTest {
 	}
 
 	@Test
-	public void testQueryEventTimeTimers() throws Exception {
+	public void testForEachEventTimeTimer() throws Exception {
 		@SuppressWarnings("unchecked")
 		Triggerable<Integer, String> mockTriggerable = mock(Triggerable.class);
 
@@ -580,19 +581,22 @@ public class InternalTimerServiceImplTest {
 		timerService.registerEventTimeTimer("hello", 10);
 		timerService.registerEventTimeTimer("hello", 20);
 
-		assertEquals(4, timerService.numEventTimeTimers());
-		assertEquals(2, timerService.numEventTimeTimers("hello"));
-		assertEquals(2, timerService.numEventTimeTimers("ciao"));
+		int otherKey;
+		do {
+			otherKey = getKeyInKeyGroupRange(testKeyGroupRange, maxParallelism);
+		} while (otherKey == key);
 
-		Set<Long> namespace1 = timerService.registeredEventTimeTimers("hello");
-		Assert.assertEquals(2, namespace1.size());
-		Assert.assertTrue(namespace1.contains(10L));
-		Assert.assertTrue(namespace1.contains(20L));
+		keyContext.setCurrentKey(otherKey);
 
-		Set<Long> namespace2 = timerService.registeredEventTimeTimers("ciao");
-		Assert.assertEquals(2, namespace2.size());
-		Assert.assertTrue(namespace2.contains(10L));
-		Assert.assertTrue(namespace2.contains(20L));
+		BiConsumerWithException<String, Long, Exception> mockConsumer = mock(BiConsumerWithException.class);
+		timerService.forEachEventTimeTimer(mockConsumer);
+
+		Assert.assertEquals(key, keyContext.getCurrentKey());
+
+		verify(mockConsumer, times(1)).accept("ciao", 10L);
+		verify(mockConsumer, times(1)).accept("ciao", 20L);
+		verify(mockConsumer, times(1)).accept("hello", 10L);
+		verify(mockConsumer, times(1)).accept("hello", 20L);
 	}
 
 	@Test
@@ -615,19 +619,22 @@ public class InternalTimerServiceImplTest {
 		timerService.registerProcessingTimeTimer("hello", 10);
 		timerService.registerProcessingTimeTimer("hello", 20);
 
-		assertEquals(4, timerService.numProcessingTimeTimers());
-		assertEquals(2, timerService.numProcessingTimeTimers("hello"));
-		assertEquals(2, timerService.numProcessingTimeTimers("ciao"));
+		int otherKey;
+		do {
+			otherKey = getKeyInKeyGroupRange(testKeyGroupRange, maxParallelism);
+		} while (otherKey == key);
 
-		Set<Long> namespace1 = timerService.registeredProcessingTimeTimers("hello");
-		Assert.assertEquals(2, namespace1.size());
-		Assert.assertTrue(namespace1.contains(10L));
-		Assert.assertTrue(namespace1.contains(20L));
+		keyContext.setCurrentKey(otherKey);
 
-		Set<Long> namespace2 = timerService.registeredProcessingTimeTimers("ciao");
-		Assert.assertEquals(2, namespace2.size());
-		Assert.assertTrue(namespace2.contains(10L));
-		Assert.assertTrue(namespace2.contains(20L));
+		BiConsumerWithException<String, Long, Exception> mockConsumer = mock(BiConsumerWithException.class);
+		timerService.forEachProcessingTimeTimer(mockConsumer);
+
+		Assert.assertEquals(key, keyContext.getCurrentKey());
+
+		verify(mockConsumer, times(1)).accept("ciao", 10L);
+		verify(mockConsumer, times(1)).accept("ciao", 20L);
+		verify(mockConsumer, times(1)).accept("hello", 10L);
+		verify(mockConsumer, times(1)).accept("hello", 20L);
 	}
 
 	@Test

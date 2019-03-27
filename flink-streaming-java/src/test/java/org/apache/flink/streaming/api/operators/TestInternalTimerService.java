@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.util.function.BiConsumerWithException;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -109,24 +110,27 @@ public class TestInternalTimerService<K, N> implements InternalTimerService<N> {
 	}
 
 	@Override
-	public Set<Long> registeredEventTimeTimers(N namespace) {
-		return registeredTimers(namespace, watermarkTimersQueue);
+	public void forEachEventTimeTimer(BiConsumerWithException<N, Long, Exception> consumer) {
+		watermarkTimers.forEach(timer -> {
+			keyContext.setCurrentKey(timer.key);
+			try {
+				consumer.accept(timer.namespace, timer.timestamp);
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		});
 	}
 
 	@Override
-	public Set<Long> registeredProcessingTimeTimers(N namespace) {
-		return registeredTimers(namespace, processingTimeTimersQueue);
-	}
-
-	private Set<Long> registeredTimers(N namespace, PriorityQueue<Timer<K, N>> queue) {
-		Set<Long> timers = new HashSet<>();
-		for (Timer<K, N> timer : queue) {
-			if (timer.key.equals(keyContext.getCurrentKey()) && timer.namespace.equals(namespace)) {
-				timers.add(timer.timestamp);
+	public void forEachProcessingTimeTimer(BiConsumerWithException<N, Long, Exception> consumer) {
+		processingTimeTimers.forEach(timer -> {
+			keyContext.setCurrentKey(timer.key);
+			try {
+				consumer.accept(timer.namespace, timer.timestamp);
+			} catch (Exception e) {
+				throw new RuntimeException(e);
 			}
-		}
-
-		return timers;
+		});
 	}
 
 	public Collection<Timer<K, N>> advanceProcessingTime(long time) throws Exception {

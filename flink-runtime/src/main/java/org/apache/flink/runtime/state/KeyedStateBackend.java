@@ -76,6 +76,13 @@ public interface KeyedStateBackend<K>
 	<N> Stream<K> getKeys(String state, N namespace);
 
 	/**
+	 * @return A stream of all namespaces for the given state and current key. Modifications to the state during iterating
+	 * 		   over it namespaces are not supported.
+	 * @param state State variable for which existing keys will be returned.
+	 */
+	<N> Stream<N> getNamespaces(String state);
+
+	/**
 	 * Creates or retrieves a keyed state backed by this state backend.
 	 *
 	 * @param namespaceSerializer The serializer used for the namespace type of the state

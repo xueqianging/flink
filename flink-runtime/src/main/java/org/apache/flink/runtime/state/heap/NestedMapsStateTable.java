@@ -195,6 +195,15 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 	}
 
 	@Override
+	public Stream<N> getNamespaces(K key) {
+		return Arrays.stream(state)
+			.filter(Objects::nonNull)
+			.flatMap(namespaces -> namespaces.entrySet().stream())
+			.filter(namespace -> namespace.getValue().containsKey(key))
+			.map(Map.Entry::getKey);
+	}
+
+	@Override
 	public StateIncrementalVisitor<K, N, S> getStateIncrementalVisitor(int recommendedMaxNumberOfReturnedRecords) {
 		return new StateEntryIterator();
 	}

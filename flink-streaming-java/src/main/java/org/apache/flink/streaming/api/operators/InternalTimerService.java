@@ -19,8 +19,7 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.annotation.Internal;
-
-import java.util.Set;
+import org.apache.flink.util.function.BiConsumerWithException;
 
 /**
  * Interface for working with time and timers.
@@ -62,14 +61,14 @@ public interface InternalTimerService<N> {
 	void deleteEventTimeTimer(N namespace, long time);
 
 	/**
-	 * Returns the current registered event time timers
-	 * for a particular key / namespace pair.
+	 * Performs a given action for each event time timers, setting the key context
+	 * for each entry.
 	 */
-	Set<Long> registeredEventTimeTimers(N namespace);
+	void forEachEventTimeTimer(BiConsumerWithException<N, Long, Exception> consumer);
 
 	/**
-	 * Returns the current registered processing time timers
-	 * for a particular key / namespace pair.
+	 * Performs a given action for each processing time timers, setting the key context
+	 * for each entry.
 	 */
-	Set<Long> registeredProcessingTimeTimers(N namespace);
+	void forEachProcessingTimeTimer(BiConsumerWithException<N, Long, Exception> consumer);
 }

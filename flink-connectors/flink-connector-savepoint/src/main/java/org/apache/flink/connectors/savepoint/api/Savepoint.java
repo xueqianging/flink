@@ -79,7 +79,7 @@ public class Savepoint {
 	 * @throws IOException Thrown, if the path cannot be resolved, the file system not accessed, or
 	 *     the path points to a location that does not seem to be a savepoint.
 	 */
-	public static Savepoint create(StateBackend stateBackend, String savepointPath) throws IOException {
+	public static Savepoint from(StateBackend stateBackend, String savepointPath) throws IOException {
 		org.apache.flink.runtime.checkpoint.savepoint.Savepoint savepoint = SavepointLoader
 			.loadSavepoint(savepointPath, Savepoint.class.getClassLoader());
 

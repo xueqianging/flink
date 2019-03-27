@@ -259,6 +259,17 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	@Override
+	public <N> Stream<N> getNamespaces(String state) {
+		if (!registeredKVStates.containsKey(state)) {
+			return Stream.empty();
+		}
+
+		final StateSnapshotRestore stateSnapshotRestore = registeredKVStates.get(state);
+		StateTable<K, N, ?> table = (StateTable<K, N, ?>) stateSnapshotRestore;
+		return table.getNamespaces(getCurrentKey());
+	}
+
+	@Override
 	@Nonnull
 	public <N, SV, SEV, S extends State, IS extends S> IS createInternalState(
 		@Nonnull TypeSerializer<N> namespaceSerializer,

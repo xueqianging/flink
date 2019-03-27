@@ -21,9 +21,13 @@ package org.apache.flink.connectors.savepoint.input;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.functions.util.FunctionUtils;
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.common.typeutils.base.StringSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
 import org.apache.flink.connectors.savepoint.input.splits.KeyGroupRangeInputSplit;
@@ -50,12 +54,13 @@ import org.apache.flink.streaming.api.operators.StreamOperatorStateContext;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializer;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializerImpl;
 import org.apache.flink.streaming.api.operators.TimerSerializer;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -119,9 +124,9 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 	@VisibleForTesting
 	static KeyGroupRangeInputSplit[] getKeyGroupRangeInputSplits(int minNumSplits, OperatorState operatorState) {
-		final List<KeyGroupRange> keyGroups = partitionKeyGroupRanges(minNumSplits, operatorState);
-
 		final int maxParallelism = operatorState.getMaxParallelism();
+
+		final List<KeyGroupRange> keyGroups = sortedKeyGroupRanges(minNumSplits, maxParallelism);
 
 		return mapWithIndex(
 			keyGroups,
@@ -189,7 +194,11 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		TimerSerializer<K, VoidNamespace> timerSerializer = new TimerSerializer<>(keySerializer, VoidNamespaceSerializer.INSTANCE);
 		InternalTimerService<VoidNamespace> timerService = timeServiceManager.getInternalTimerService(USER_TIMERS_NAME, timerSerializer, VoidTriggerable.instance());
 
-		ctx = new Context(timerService);
+		try {
+			ctx = Context.from(timerService, context.keyedStateBackend());
+		} catch (Exception e) {
+			throw new IOException("Failed to restore timers from statebackend", e);
+		}
 
 		keyedStateBackend = (AbstractKeyedStateBackend<K>) context.keyedStateBackend();
 		final DefaultKeyedStateStore keyedStateStore = new DefaultKeyedStateStore(keyedStateBackend, getRuntimeContext().getExecutionConfig());
@@ -255,37 +264,84 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 	 * parallelism n.
 	 */
 	@Nonnull
-	private static List<KeyGroupRange> partitionKeyGroupRanges(int minNumSplits, OperatorState operatorState) {
-		return StateAssignmentOperation.createKeyGroupPartitions(
-			operatorState.getMaxParallelism(),
-			Math.min(minNumSplits, operatorState.getMaxParallelism()));
+	private static List<KeyGroupRange> sortedKeyGroupRanges(int minNumSplits, int maxParallelism) {
+		List<KeyGroupRange> keyGroups = StateAssignmentOperation.createKeyGroupPartitions(
+			maxParallelism,
+			Math.min(minNumSplits, maxParallelism));
+
+		keyGroups.sort(Comparator.comparing(KeyGroupRange::getStartKeyGroup));
+		return keyGroups;
 	}
 
 	@SuppressWarnings("unchecked")
 	private static class Context implements ProcessReaderFunction.Context {
-		@Nullable
-		private InternalTimerService<VoidNamespace> timerService;
+		private final ListState<Long> eventTimers;
 
-		private Context(@Nullable InternalTimerService<VoidNamespace> timerService) {
-			this.timerService = timerService;
+		private final ListState<Long> procTimers;
+
+		private final Set<Long> eventTimerSet;
+
+		private final Set<Long> procTimerSet;
+
+		private static Context from(
+			InternalTimerService<VoidNamespace> timerService,
+			AbstractKeyedStateBackend<?> keyedStateBackend
+		) throws Exception {
+
+			ListStateDescriptor<Long> eventTimerDescriptor = new ListStateDescriptor<>("event-timers", Types.LONG);
+			ListStateDescriptor<Long> procTimerDescriptor = new ListStateDescriptor<>("proc-timers", Types.LONG);
+
+			ListState<Long> eventTimers = keyedStateBackend
+				.getPartitionedState(USER_TIMERS_NAME, StringSerializer.INSTANCE, eventTimerDescriptor);
+
+			ListState<Long> procTimers = keyedStateBackend
+				.getPartitionedState(USER_TIMERS_NAME, StringSerializer.INSTANCE, procTimerDescriptor);
+
+			timerService.forEachEventTimeTimer((namespace, timestamp) -> {
+				if (namespace.equals(VoidNamespace.INSTANCE)) {
+					eventTimers.add(timestamp);
+				}
+			});
+
+			timerService.forEachProcessingTimeTimer((namespace, timestamp) -> {
+				if (namespace.equals(VoidNamespace.INSTANCE)) {
+					procTimers.add(timestamp);
+				}
+			});
+
+			return new Context(eventTimers, procTimers);
+		}
+
+		private Context(ListState<Long> eventTimers, ListState<Long> procTimers) {
+			this.eventTimers = eventTimers;
+			this.procTimers = procTimers;
+
+			this.eventTimerSet = new HashSet<>();
+			this.procTimerSet = new HashSet<>();
 		}
 
 		@Override
 		public Set<Long> getEventTimeTimers() {
-			if (timerService == null) {
-				return (Set<Long>) Collections.EMPTY_SET;
-			}
+			try {
+				eventTimerSet.clear();
+				eventTimers.get().forEach(eventTimerSet::add);
 
-			return timerService.registeredEventTimeTimers(VoidNamespace.INSTANCE);
+				return eventTimerSet;
+			} catch (Exception e) {
+				throw new FlinkRuntimeException(e);
+			}
 		}
 
 		@Override
 		public Set<Long> getProcessingTimeTimers() {
-			if (timerService == null) {
-				return (Set<Long>) Collections.EMPTY_SET;
-			}
+			try {
+				procTimerSet.clear();
+				procTimers.get().forEach(procTimerSet::add);
 
-			return timerService.registeredProcessingTimeTimers(VoidNamespace.INSTANCE);
+				return procTimerSet;
+			} catch (Exception e) {
+				throw new FlinkRuntimeException(e);
+			}
 		}
 	}
 }

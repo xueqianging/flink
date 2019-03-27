@@ -152,7 +152,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 			.process(new ModifyProcessFunction());
 
 		Savepoint
-			.create(backend, savepointPath)
+			.from(backend, savepointPath)
 			.withOperator(modify, operator)
 			.write(modifyPath);
 

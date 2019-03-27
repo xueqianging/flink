@@ -29,10 +29,10 @@ import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.function.BiConsumerWithException;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
@@ -227,30 +227,25 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N>, 
 	}
 
 	@Override
-	public Set<Long> registeredEventTimeTimers(N namespace) {
-		return registeredTimers(namespace, eventTimeTimersQueue);
+	public void forEachEventTimeTimer(BiConsumerWithException<N, Long, Exception> consumer) {
+		forEachTimer(consumer, eventTimeTimersQueue);
 	}
 
 	@Override
-	public Set<Long> registeredProcessingTimeTimers(N namespace) {
-		return registeredTimers(namespace, processingTimeTimersQueue);
+	public void forEachProcessingTimeTimer(BiConsumerWithException<N, Long, Exception> consumer) {
+		forEachTimer(consumer, processingTimeTimersQueue);
 	}
 
-	// TODO this is very inefficient
-	private Set<Long> registeredTimers(N namespace, KeyGroupedInternalPriorityQueue<TimerHeapInternalTimer<K, N>> queue) {
-		Set<Long> timers = new HashSet<>();
+	private void forEachTimer(BiConsumerWithException<N, Long, Exception> consumer, KeyGroupedInternalPriorityQueue<TimerHeapInternalTimer<K, N>> queue) {
 		try (final CloseableIterator<TimerHeapInternalTimer<K, N>> iterator = queue.iterator()) {
 			while (iterator.hasNext()) {
 				final TimerHeapInternalTimer<K, N> timer = iterator.next();
-				if (timer.getKey().equals(keyContext.getCurrentKey()) && timer.getNamespace().equals(namespace)) {
-					timers.add(timer.getTimestamp());
-				}
+				keyContext.setCurrentKey(timer.getKey());
+				consumer.accept(timer.getNamespace(), timer.getTimestamp());
 			}
 		} catch (Exception e) {
 			throw new FlinkRuntimeException("Exception when closing iterator.", e);
 		}
-
-		return timers;
 	}
 
 	@Override

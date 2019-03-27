@@ -37,9 +37,9 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 @Public
 public abstract class CompositeType<T> extends TypeInformation<T> {
-	
+
 	private static final long serialVersionUID = 1L;
-	
+
 	private final Class<T> typeClass;
 
 	@PublicEvolving
