@@ -406,7 +406,9 @@ public abstract class AbstractFetcher<T, KPH> {
 					long previousOffset = partitionState.getOffset();
 					if (offset < previousOffset) {
 						throw new FlinkRuntimeException(
-							String.format("%s %d %d", partitionState.getTopic(), partitionState.getPartition(), partitionState.getOffset())
+							String.format("Kafka partition is non monotonically increasing." +
+									" Topic %s Partition %d was at offset %d but is wants to consume %d",
+								partitionState.getTopic(), partitionState.getPartition(), partitionState.getOffset(), offset)
 						);
 					}
 					partitionState.setOffset(offset);
@@ -422,7 +424,9 @@ public abstract class AbstractFetcher<T, KPH> {
 				long previousOffset = partitionState.getOffset();
 				if (offset < previousOffset) {
 					throw new FlinkRuntimeException(
-						String.format("%s %d %d", partitionState.getTopic(), partitionState.getPartition(), partitionState.getOffset())
+						String.format("Kafka partition is non monotonically increasing." +
+							" Topic %s Partition %d was at offset %d but is wants to consume %d",
+							partitionState.getTopic(), partitionState.getPartition(), partitionState.getOffset(), offset)
 					);
 				}
 				partitionState.setOffset(offset);
