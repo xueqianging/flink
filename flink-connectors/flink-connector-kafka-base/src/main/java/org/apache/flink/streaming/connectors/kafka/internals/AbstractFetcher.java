@@ -20,6 +20,8 @@ package org.apache.flink.streaming.connectors.kafka.internals;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.metrics.Gauge;
+import org.apache.flink.metrics.Meter;
+import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
@@ -29,6 +31,7 @@ import org.apache.flink.streaming.connectors.kafka.config.OffsetCommitMode;
 import org.apache.flink.streaming.connectors.kafka.internals.metrics.KafkaConsumerMetricConstants;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeCallback;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.SerializedValue;
 
 import javax.annotation.Nonnull;
@@ -145,7 +148,11 @@ public abstract class AbstractFetcher<T, KPH> {
 			ClassLoader userCodeClassLoader,
 			MetricGroup consumerMetricGroup,
 			boolean useMetrics) throws Exception {
-		this.sourceContext = checkNotNull(sourceContext);
+
+		Meter meter = new MeterView(5);
+		consumerMetricGroup.addGroup("kafka-output").meter("rate", meter);
+
+		this.sourceContext = new MeteredSource<>(checkNotNull(sourceContext), meter);
 		this.checkpointLock = sourceContext.getCheckpointLock();
 		this.userCodeClassLoader = checkNotNull(userCodeClassLoader);
 
@@ -396,6 +403,12 @@ public abstract class AbstractFetcher<T, KPH> {
 				// atomicity of record emission and offset state update
 				synchronized (checkpointLock) {
 					sourceContext.collectWithTimestamp(record, timestamp);
+					long previousOffset = partitionState.getOffset();
+					if (offset < previousOffset) {
+						throw new FlinkRuntimeException(
+							String.format("%s %d %d", partitionState.getTopic(), partitionState.getPartition(), partitionState.getOffset())
+						);
+					}
 					partitionState.setOffset(offset);
 				}
 			} else if (timestampWatermarkMode == PERIODIC_WATERMARKS) {
@@ -406,6 +419,12 @@ public abstract class AbstractFetcher<T, KPH> {
 		} else {
 			// if the record is null, simply just update the offset state for partition
 			synchronized (checkpointLock) {
+				long previousOffset = partitionState.getOffset();
+				if (offset < previousOffset) {
+					throw new FlinkRuntimeException(
+						String.format("%s %d %d", partitionState.getTopic(), partitionState.getPartition(), partitionState.getOffset())
+					);
+				}
 				partitionState.setOffset(offset);
 			}
 		}

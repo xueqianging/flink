@@ -18,6 +18,7 @@
 package org.apache.flink.streaming.connectors.kafka.internal;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.typeutils.base.LongComparator;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
@@ -39,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -135,6 +137,10 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 
 					List<ConsumerRecord<byte[], byte[]>> partitionRecords =
 						records.records(partition.getKafkaPartitionHandle());
+
+					//ensure all records within a particular batch
+					//to avoid spurious exceptions.
+					partitionRecords.sort(Comparator.comparingLong(ConsumerRecord::offset));
 
 					for (ConsumerRecord<byte[], byte[]> record : partitionRecords) {
 						final T value = deserializer.deserialize(
