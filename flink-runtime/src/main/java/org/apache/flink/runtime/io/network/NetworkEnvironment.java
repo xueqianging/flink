@@ -19,11 +19,14 @@
 package org.apache.flink.runtime.io.network;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.metrics.Gauge;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.netty.NettyConfig;
 import org.apache.flink.runtime.io.network.netty.NettyConnectionManager;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.taskexecutor.TaskExecutor;
@@ -36,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -47,6 +51,10 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class NetworkEnvironment {
 
 	private static final Logger LOG = LoggerFactory.getLogger(NetworkEnvironment.class);
+
+	private static final String METRIC_GROUP_NETWORK = "Network";
+	private static final String METRIC_TOTAL_MEMORY_SEGMENT = "TotalMemorySegments";
+	private static final String METRIC_AVAILABLE_MEMORY_SEGMENT = "AvailableMemorySegments";
 
 	private final Object lock = new Object();
 
@@ -62,7 +70,10 @@ public class NetworkEnvironment {
 
 	private boolean isShutdown;
 
-	public NetworkEnvironment(NetworkEnvironmentConfiguration config, TaskEventPublisher taskEventPublisher) {
+	public NetworkEnvironment(
+			NetworkEnvironmentConfiguration config,
+			TaskEventPublisher taskEventPublisher,
+			MetricGroup metricGroup) {
 		this.config = checkNotNull(config);
 
 		this.networkBufferPool = new NetworkBufferPool(config.numNetworkBuffers(), config.networkBufferSize());
@@ -78,7 +89,19 @@ public class NetworkEnvironment {
 
 		this.taskEventPublisher = checkNotNull(taskEventPublisher);
 
+		registerNetworkMetrics(metricGroup, networkBufferPool);
+
 		isShutdown = false;
+	}
+
+	private static void registerNetworkMetrics(MetricGroup metricGroup, NetworkBufferPool networkBufferPool) {
+		checkNotNull(metricGroup);
+
+		MetricGroup networkGroup = metricGroup.addGroup(METRIC_GROUP_NETWORK);
+		networkGroup.<Integer, Gauge<Integer>>gauge(METRIC_TOTAL_MEMORY_SEGMENT,
+			networkBufferPool::getTotalNumberOfMemorySegments);
+		networkGroup.<Integer, Gauge<Integer>>gauge(METRIC_AVAILABLE_MEMORY_SEGMENT,
+			networkBufferPool::getNumberOfAvailableMemorySegments);
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -93,6 +116,7 @@ public class NetworkEnvironment {
 		return connectionManager;
 	}
 
+	@VisibleForTesting
 	public NetworkBufferPool getNetworkBufferPool() {
 		return networkBufferPool;
 	}
@@ -182,6 +206,17 @@ public class NetworkEnvironment {
 			}
 
 			ExceptionUtils.rethrowIOException(t);
+		}
+	}
+
+	/**
+	 * Batch release intermediate result partitions.
+	 *
+	 * @param partitionIds partition ids to release
+	 */
+	public void releasePartitions(Collection<ResultPartitionID> partitionIds) {
+		for (ResultPartitionID partitionId : partitionIds) {
+			resultPartitionManager.releasePartition(partitionId, null);
 		}
 	}
 

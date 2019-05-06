@@ -21,12 +21,11 @@ import _root_.java.util.Collections.emptyList
 import _root_.java.util.function.Supplier
 
 import org.apache.calcite.rel.RelNode
-import org.apache.flink.api.java.operators.join.JoinType
 import org.apache.flink.table.expressions.{Expression, ExpressionParser, LookupCallResolver}
 import org.apache.flink.table.functions.{TemporalTableFunction, TemporalTableFunctionImpl}
+import org.apache.flink.table.operations.JoinTableOperation.JoinType
 import org.apache.flink.table.operations.OperationExpressionsUtils.extractAggregationsAndProperties
 import org.apache.flink.table.operations.{OperationTreeBuilder, TableOperation}
-import org.apache.flink.table.plan.logical._
 import org.apache.flink.table.util.JavaScalaConversionUtil.toJava
 
 import _root_.scala.collection.JavaConversions._
@@ -43,7 +42,7 @@ import _root_.scala.collection.JavaConverters._
   * @param operationTree logical representation
   */
 class TableImpl(
-    private[flink] val tableEnv: TableEnvironment,
+    private[flink] val tableEnv: TableEnvImpl,
     private[flink] val operationTree: TableOperation)
   extends Table {
 
@@ -55,8 +54,12 @@ class TableImpl(
 
   var tableName: String = _
 
-  def getRelNode: RelNode = operationTree.asInstanceOf[LogicalNode]
-    .toRelNode(tableEnv.getRelBuilder)
+  def getRelNode: RelNode = tableEnv.getRelBuilder.tableOperation(operationTree).build()
+
+  /**
+    * Returns the [[TableEnvironment]] of this table.
+    */
+  def getTableEnvironment: TableEnvironment = tableEnv
 
   override def getSchema: TableSchema = tableSchema
 
@@ -366,7 +369,7 @@ class TableImpl(
 
   override def window(overWindows: OverWindow*): OverWindowedTable = {
 
-    if (tableEnv.isInstanceOf[BatchTableEnvironment]) {
+    if (tableEnv.isInstanceOf[BatchTableEnvImpl]) {
       throw new TableException("Over-windows for batch tables are currently not supported.")
     }
 
@@ -442,6 +445,14 @@ class TableImpl(
     wrap(operationTreeBuilder.flatMap(tableFunction, operationTree))
   }
 
+  override def flatAggregate(tableAggFunction: String): FlatAggregateTable = {
+    groupBy().flatAggregate(tableAggFunction)
+  }
+
+  override def flatAggregate(tableAggFunction: Expression): FlatAggregateTable = {
+    groupBy().flatAggregate(tableAggFunction)
+  }
+
   /**
     * Registers an unique table name under the table environment
     * and return the registered table name.
@@ -490,6 +501,39 @@ class GroupedTableImpl(
           tableImpl.operationTree
         )
       ))
+  }
+
+  override def flatAggregate(tableAggFunction: String): FlatAggregateTable = {
+    flatAggregate(ExpressionParser.parseExpression(tableAggFunction))
+  }
+
+  override def flatAggregate(tableAggFunction: Expression): FlatAggregateTable = {
+    new FlatAggregateTableImpl(table, groupKeys, tableAggFunction)
+  }
+}
+
+class FlatAggregateTableImpl(
+  private[flink] val table: Table,
+  private[flink] val groupKey: Seq[Expression],
+  private[flink] val tableAggFunction: Expression) extends FlatAggregateTable {
+
+  private val tableImpl = table.asInstanceOf[TableImpl]
+
+  override def select(fields: String): Table = {
+    select(ExpressionParser.parseExpressionList(fields).asScala: _*)
+  }
+
+  override def select(fields: Expression*): Table = {
+    val resolvedTableAggFunction = tableAggFunction.accept(tableImpl.callResolver)
+
+    val flatAggTable = new TableImpl(tableImpl.tableEnv,
+      tableImpl.operationTreeBuilder.tableAggregate(
+        groupKey.asJava,
+        resolvedTableAggFunction,
+        tableImpl.operationTree
+      ))
+
+    flatAggTable.select(fields: _*)
   }
 }
 

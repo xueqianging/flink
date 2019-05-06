@@ -117,6 +117,12 @@ class StreamExecRank(
     List(getInput.asInstanceOf[ExecNode[StreamTableEnvironment, _]])
   }
 
+  override def replaceInputNode(
+      ordinalInParent: Int,
+      newInputNode: ExecNode[StreamTableEnvironment, _]): Unit = {
+    replaceInput(ordinalInParent, newInputNode.asInstanceOf[RelNode])
+  }
+
   override protected def translateToPlanInternal(
       tableEnv: StreamTableEnvironment): StreamTransformation[BaseRow] = {
     val tableConfig = tableEnv.getConfig
@@ -172,7 +178,7 @@ class StreamExecRank(
           cacheSize)
 
       // TODO Use UnaryUpdateTopNFunction after SortedMapState is merged
-      case RetractStrategy | UnaryUpdateStrategy(_) =>
+      case RetractStrategy =>
         val equaliserCodeGen = new EqualiserCodeGenerator(inputRowTypeInfo.getInternalTypes)
         val generatedEqualiser = equaliserCodeGen.generateRecordEqualiser("RankValueEqualiser")
 

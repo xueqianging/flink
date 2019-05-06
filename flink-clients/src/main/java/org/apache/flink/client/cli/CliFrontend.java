@@ -52,7 +52,6 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.messages.JobManagerMessages;
 import org.apache.flink.runtime.security.SecurityConfiguration;
 import org.apache.flink.runtime.security.SecurityUtils;
 import org.apache.flink.runtime.util.EnvironmentInformation;
@@ -88,9 +87,6 @@ import java.util.stream.Collectors;
 
 import scala.concurrent.duration.FiniteDuration;
 
-import static org.apache.flink.client.cli.CliFrontendParser.HELP_OPTION;
-import static org.apache.flink.client.cli.CliFrontendParser.MODIFY_PARALLELISM_OPTION;
-
 /**
  * Implementation of a simple command line frontend for executing programs.
  */
@@ -105,7 +101,6 @@ public class CliFrontend {
 	private static final String ACTION_CANCEL = "cancel";
 	private static final String ACTION_STOP = "stop";
 	private static final String ACTION_SAVEPOINT = "savepoint";
-	private static final String ACTION_MODIFY = "modify";
 
 	// configuration dir parameters
 	private static final String CONFIG_DIRECTORY_FALLBACK_1 = "../conf";
@@ -691,8 +686,7 @@ public class CliFrontend {
 	}
 
 	/**
-	 * Sends a {@link org.apache.flink.runtime.messages.JobManagerMessages.TriggerSavepoint}
-	 * message to the job manager.
+	 * Sends a SavepointTriggerMessage to the job manager.
 	 */
 	private String triggerSavepoint(ClusterClient<?> clusterClient, JobID jobId, String savepointDirectory) throws FlinkException {
 		logAndSysout("Triggering savepoint for job " + jobId + '.');
@@ -717,7 +711,7 @@ public class CliFrontend {
 	}
 
 	/**
-	 * Sends a {@link JobManagerMessages.DisposeSavepoint} message to the job manager.
+	 * Sends a SavepointDisposalRequest to the job manager.
 	 */
 	private void disposeSavepoint(ClusterClient<?> clusterClient, String savepointPath) throws FlinkException {
 		Preconditions.checkNotNull(savepointPath, "Missing required argument: savepoint path. " +
@@ -736,58 +730,6 @@ public class CliFrontend {
 		}
 
 		logAndSysout("Savepoint '" + savepointPath + "' disposed.");
-	}
-
-	protected void modify(String[] args) throws CliArgsException, FlinkException {
-		LOG.info("Running 'modify' command.");
-
-		final Options commandOptions = CliFrontendParser.getModifyOptions();
-
-		final Options commandLineOptions = CliFrontendParser.mergeOptions(commandOptions, customCommandLineOptions);
-
-		final CommandLine commandLine = CliFrontendParser.parse(commandLineOptions, args, false);
-
-		if (commandLine.hasOption(HELP_OPTION.getOpt())) {
-			CliFrontendParser.printHelpForModify(customCommandLines);
-		}
-
-		final JobID jobId;
-		final String[] modifyArgs = commandLine.getArgs();
-
-		if (modifyArgs.length > 0) {
-			jobId = parseJobId(modifyArgs[0]);
-		} else {
-			throw new CliArgsException("Missing JobId");
-		}
-
-		final int newParallelism;
-		if (commandLine.hasOption(MODIFY_PARALLELISM_OPTION.getOpt())) {
-			try {
-				newParallelism = Integer.parseInt(commandLine.getOptionValue(MODIFY_PARALLELISM_OPTION.getOpt()));
-			} catch (NumberFormatException e) {
-				throw new CliArgsException("Could not parse the parallelism which is supposed to be an integer.", e);
-			}
-		} else {
-			throw new CliArgsException("Missing new parallelism.");
-		}
-
-		final CustomCommandLine<?> activeCommandLine = getActiveCustomCommandLine(commandLine);
-
-		logAndSysout("Modify job " + jobId + '.');
-		runClusterAction(
-			activeCommandLine,
-			commandLine,
-			clusterClient -> {
-				CompletableFuture<Acknowledge> rescaleFuture = clusterClient.rescaleJob(jobId, newParallelism);
-
-				try {
-					rescaleFuture.get();
-				} catch (Exception e) {
-					throw new FlinkException("Could not rescale job " + jobId + '.', ExceptionUtils.stripExecutionException(e));
-				}
-				logAndSysout("Rescaled job " + jobId + ". Its new parallelism is " + newParallelism + '.');
-			}
-		);
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -1054,9 +996,6 @@ public class CliFrontend {
 					return 0;
 				case ACTION_SAVEPOINT:
 					savepoint(params);
-					return 0;
-				case ACTION_MODIFY:
-					modify(params);
 					return 0;
 				case "-h":
 				case "--help":
