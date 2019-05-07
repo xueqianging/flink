@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -140,9 +141,10 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 
 					//ensure all records within a particular batch
 					//to avoid spurious exceptions.
-					partitionRecords.sort(Comparator.comparingLong(ConsumerRecord::offset));
+					List<ConsumerRecord<byte[], byte[]>> sortedList = new ArrayList<>(partitionRecords);
+					sortedList.sort(Comparator.comparingLong(ConsumerRecord::offset));
 
-					for (ConsumerRecord<byte[], byte[]> record : partitionRecords) {
+					for (ConsumerRecord<byte[], byte[]> record : sortedList) {
 						final T value = deserializer.deserialize(
 							record.key(), record.value(),
 							record.topic(), record.partition(), record.offset());
