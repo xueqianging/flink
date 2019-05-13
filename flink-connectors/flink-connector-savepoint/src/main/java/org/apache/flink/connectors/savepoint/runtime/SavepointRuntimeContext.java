@@ -58,7 +58,7 @@ import java.util.Map;
  * throwing an exception if state is registered outside of open.
  */
 @Internal
-public final class SavepointRuntimeContext implements RuntimeContext {
+public final class SavepointRuntimeContext implements RuntimeContext, AutoCloseable {
 	private static final String REGISTRATION_EXCEPTION_MSG =
 		"State Descriptors may only be registered inside of open";
 
@@ -73,6 +73,7 @@ public final class SavepointRuntimeContext implements RuntimeContext {
 	public SavepointRuntimeContext(RuntimeContext ctx, KeyedStateStore keyedStateStore) {
 		this.ctx = ctx;
 		this.keyedStateStore = keyedStateStore;
+		this.inOpen = true;
 
 		this.registeredDescriptors = new ArrayList<>();
 	}
@@ -241,19 +242,16 @@ public final class SavepointRuntimeContext implements RuntimeContext {
 		return keyedStateStore.getMapState(stateProperties);
 	}
 
-	public void enterOpen() {
-		inOpen = true;
-	}
-
-	public void exitOpen() {
-		inOpen = false;
-	}
-
 	public List<StateDescriptor<?, ?>> getStateDescriptors() {
 		if (registeredDescriptors.isEmpty()) {
 			return Collections.emptyList();
 		}
 		return new ArrayList<>(registeredDescriptors);
+	}
+
+	@Override
+	public void close() throws Exception {
+		inOpen = false;
 	}
 }
 

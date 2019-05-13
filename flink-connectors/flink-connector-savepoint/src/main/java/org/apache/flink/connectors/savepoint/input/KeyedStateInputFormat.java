@@ -21,13 +21,9 @@ package org.apache.flink.connectors.savepoint.input;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.functions.util.FunctionUtils;
-import org.apache.flink.api.common.state.ListState;
-import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.common.typeutils.base.StringSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
 import org.apache.flink.connectors.savepoint.input.splits.KeyGroupRangeInputSplit;
@@ -54,16 +50,15 @@ import org.apache.flink.streaming.api.operators.StreamOperatorStateContext;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializer;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializerImpl;
 import org.apache.flink.streaming.api.operators.TimerSerializer;
-import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.CollectionUtil;
+import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
 
 import java.io.IOException;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Input format for reading partitioned state.
@@ -92,7 +87,7 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 	private transient AbstractKeyedStateBackend<K> keyedStateBackend;
 
-	private transient Context ctx;
+	private transient ProcessReaderContext ctx;
 
 	/**
 	 * Creates an input format for reading partitioned state from an operator in a savepoint.
@@ -128,7 +123,7 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 		final List<KeyGroupRange> keyGroups = sortedKeyGroupRanges(minNumSplits, maxParallelism);
 
-		return mapWithIndex(
+		return CollectionUtil.mapWithIndex(
 			keyGroups,
 			(keyGroupRange, index) -> createKeyGroupRangeInputSplit(
 				operatorState,
@@ -172,14 +167,45 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 			.setPrioritizedOperatorSubtaskState(split.getPrioritizedOperatorSubtaskState())
 			.build();
 
+		final StreamOperatorStateContext context = getStreamOperatorStateContext(environment);
+
+		keyedStateBackend = (AbstractKeyedStateBackend<K>) context.keyedStateBackend();
+		keys = getKeyIterator();
+
+
+		final InternalTimerService<VoidNamespace> timerService = restoreTimerService(context);
+		try {
+			ctx = ProcessReaderContext.create(USER_TIMERS_NAME, timerService, context.keyedStateBackend());
+		} catch (Exception e) {
+			throw new IOException("Failed to restore timers from state backend", e);
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private Iterator<K> getKeyIterator() throws IOException {
+		Preconditions.checkNotNull(keyedStateBackend);
+		final DefaultKeyedStateStore keyedStateStore = new DefaultKeyedStateStore(keyedStateBackend, getRuntimeContext().getExecutionConfig());
+
+		final List<StateDescriptor<?, ?>> stateDescriptors;
+		try (SavepointRuntimeContext ctx = new SavepointRuntimeContext(getRuntimeContext(), keyedStateStore)) {
+			FunctionUtils.setFunctionRuntimeContext(userFunction, ctx);
+			FunctionUtils.openFunction(userFunction, new Configuration());
+			stateDescriptors = ctx.getStateDescriptors();
+		} catch (Exception e) {
+			throw new IOException("Failed to open user defined function", e);
+		}
+
+		return new MultiStateKeyIterator<>(stateDescriptors, keyedStateBackend);
+	}
+
+	private StreamOperatorStateContext getStreamOperatorStateContext(Environment environment) throws IOException {
 		StreamTaskStateInitializer initializer = new StreamTaskStateInitializerImpl(
 			environment,
 			stateBackend,
 			new NeverFireProcessingTimeService());
 
-		StreamOperatorStateContext context;
 		try {
-			context = initializer.streamOperatorStateContext(
+			return initializer.streamOperatorStateContext(
 				getOperatorID(),
 				getUid(),
 				this,
@@ -189,33 +215,13 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		} catch (Exception e) {
 			throw new IOException("Failed to restore state backend", e);
 		}
+	}
 
+	@SuppressWarnings("unchecked")
+	private InternalTimerService<VoidNamespace> restoreTimerService(StreamOperatorStateContext context) {
 		InternalTimeServiceManager<K> timeServiceManager = (InternalTimeServiceManager<K>) context.internalTimerServiceManager();
 		TimerSerializer<K, VoidNamespace> timerSerializer = new TimerSerializer<>(keySerializer, VoidNamespaceSerializer.INSTANCE);
-		InternalTimerService<VoidNamespace> timerService = timeServiceManager.getInternalTimerService(USER_TIMERS_NAME, timerSerializer, VoidTriggerable.instance());
-
-		try {
-			ctx = Context.from(timerService, context.keyedStateBackend());
-		} catch (Exception e) {
-			throw new IOException("Failed to restore timers from statebackend", e);
-		}
-
-		keyedStateBackend = (AbstractKeyedStateBackend<K>) context.keyedStateBackend();
-		final DefaultKeyedStateStore keyedStateStore = new DefaultKeyedStateStore(keyedStateBackend, getRuntimeContext().getExecutionConfig());
-		final SavepointRuntimeContext ctx = new SavepointRuntimeContext(getRuntimeContext(), keyedStateStore);
-
-		ctx.enterOpen();
-		List<StateDescriptor<?, ?>> stateDescriptors;
-		try {
-			FunctionUtils.setFunctionRuntimeContext(userFunction, ctx);
-			FunctionUtils.openFunction(userFunction, new Configuration());
-			stateDescriptors = ctx.getStateDescriptors();
-		} catch (Exception e) {
-			throw new IOException("Failed to open user defined function", e);
-		}
-		ctx.exitOpen();
-
-		this.keys = new MultiStateKeyIterator<>(stateDescriptors, (AbstractKeyedStateBackend<K>) context.keyedStateBackend());
+		return timeServiceManager.getInternalTimerService(USER_TIMERS_NAME, timerSerializer, VoidTriggerable.instance());
 	}
 
 	@Override
@@ -271,77 +277,5 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 		keyGroups.sort(Comparator.comparing(KeyGroupRange::getStartKeyGroup));
 		return keyGroups;
-	}
-
-	@SuppressWarnings("unchecked")
-	private static class Context implements ProcessReaderFunction.Context {
-		private final ListState<Long> eventTimers;
-
-		private final ListState<Long> procTimers;
-
-		private final Set<Long> eventTimerSet;
-
-		private final Set<Long> procTimerSet;
-
-		private static Context from(
-			InternalTimerService<VoidNamespace> timerService,
-			AbstractKeyedStateBackend<?> keyedStateBackend
-		) throws Exception {
-
-			ListStateDescriptor<Long> eventTimerDescriptor = new ListStateDescriptor<>("event-timers", Types.LONG);
-			ListStateDescriptor<Long> procTimerDescriptor = new ListStateDescriptor<>("proc-timers", Types.LONG);
-
-			ListState<Long> eventTimers = keyedStateBackend
-				.getPartitionedState(USER_TIMERS_NAME, StringSerializer.INSTANCE, eventTimerDescriptor);
-
-			ListState<Long> procTimers = keyedStateBackend
-				.getPartitionedState(USER_TIMERS_NAME, StringSerializer.INSTANCE, procTimerDescriptor);
-
-			timerService.forEachEventTimeTimer((namespace, timestamp) -> {
-				if (namespace.equals(VoidNamespace.INSTANCE)) {
-					eventTimers.add(timestamp);
-				}
-			});
-
-			timerService.forEachProcessingTimeTimer((namespace, timestamp) -> {
-				if (namespace.equals(VoidNamespace.INSTANCE)) {
-					procTimers.add(timestamp);
-				}
-			});
-
-			return new Context(eventTimers, procTimers);
-		}
-
-		private Context(ListState<Long> eventTimers, ListState<Long> procTimers) {
-			this.eventTimers = eventTimers;
-			this.procTimers = procTimers;
-
-			this.eventTimerSet = new HashSet<>();
-			this.procTimerSet = new HashSet<>();
-		}
-
-		@Override
-		public Set<Long> getEventTimeTimers() {
-			try {
-				eventTimerSet.clear();
-				eventTimers.get().forEach(eventTimerSet::add);
-
-				return eventTimerSet;
-			} catch (Exception e) {
-				throw new FlinkRuntimeException(e);
-			}
-		}
-
-		@Override
-		public Set<Long> getProcessingTimeTimers() {
-			try {
-				procTimerSet.clear();
-				procTimers.get().forEach(procTimerSet::add);
-
-				return procTimerSet;
-			} catch (Exception e) {
-				throw new FlinkRuntimeException(e);
-			}
-		}
 	}
 }

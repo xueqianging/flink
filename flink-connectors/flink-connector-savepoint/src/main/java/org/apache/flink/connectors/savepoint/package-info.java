@@ -43,7 +43,7 @@
  * tables. Those tables in turn contain columns whose values have some intrinsic relationship
  * between them, such as being scoped under the same key.
  *
- * <p>A {@code Savepoint} represents the state of a job, which contains may operators. Those
+ * <p>A {@code Savepoint} represents the state of a job, which contains many operators. Those
  * operators, contain various kinds of state, both partitioned or keyed state along with
  * non-partitioned or operator state.
  *

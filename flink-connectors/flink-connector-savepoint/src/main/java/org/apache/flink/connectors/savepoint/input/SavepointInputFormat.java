@@ -34,10 +34,6 @@ import org.apache.flink.runtime.jobgraph.OperatorID;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiFunction;
-import java.util.stream.Stream;
 
 /**
  * Base input format for reading state form {@link Savepoint}'s.
@@ -85,7 +81,7 @@ abstract class SavepointInputFormat<OT, T extends InputSplit> extends RichInputF
 	 * @throws IOException If the savepoint path is invalid or the uid does not exist
 	 */
 	OperatorState getOperatorState() throws IOException {
-		final Savepoint savepoint = SavepointLoader.loadSavepoint(savepointPath, this.getClass().getClassLoader());
+		final Savepoint savepoint = SavepointLoader.loadSavepoint(savepointPath, getRuntimeContext().getUserCodeClassLoader());
 
 		for (final OperatorState state : savepoint.getOperatorStates()) {
 			if (state.getOperatorID().equals(operatorID)) {
@@ -97,13 +93,6 @@ abstract class SavepointInputFormat<OT, T extends InputSplit> extends RichInputF
 		}
 
 		throw new IOException("Savepoint does not contain state with operator uid " + uid);
-	}
-
-	protected static <T, R> Stream<R> mapWithIndex(
-		Collection<T> input, final BiFunction<T, Integer, R> mapper) {
-		final AtomicInteger count = new AtomicInteger(0);
-
-		return input.stream().map(element -> mapper.apply(element, count.getAndIncrement()));
 	}
 
 	protected final String getUid() {

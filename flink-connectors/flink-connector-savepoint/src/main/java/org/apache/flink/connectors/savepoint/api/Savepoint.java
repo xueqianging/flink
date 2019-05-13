@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
  * when starting a {@link org.apache.flink.streaming.api.datastream.DataStream} job.
  */
 public class Savepoint {
+
 	private final StateBackend stateBackend;
 
 	private final int maxParallelism;
@@ -95,7 +96,7 @@ public class Savepoint {
 			.stream()
 			.map(OperatorState::getMaxParallelism)
 			.max(Comparator.naturalOrder())
-			.orElseThrow(() -> new RuntimeException("Savepoints must contain at least one operator"));
+			.orElseThrow(() -> new RuntimeException("Savepoint's must contain at least one operator"));
 
 		return new Savepoint(stateBackend, maxParallelism, oldOperators, masterStates);
 	}
@@ -162,7 +163,7 @@ public class Savepoint {
 			.map(entry -> getOperatorStates(entry.getKey(), entry.getValue(), savepointPath))
 			.reduce(DataSet::union)
 			.map(this::addExistingOperatorState)
-			.orElseThrow(() -> new IllegalStateException("Savepoints must contain at least one operator"))
+			.orElseThrow(() -> new IllegalStateException("Savepoint's must contain at least one operator"))
 			.reduceGroup(new OperatorStateReducer(masterStates))
 			.output(new SavepointOutputFormat(savepointPath));
 	}

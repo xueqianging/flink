@@ -34,9 +34,7 @@ import java.util.List;
 @Internal
 public final class KeyGroupRangeInputSplit implements InputSplit {
 
-	private final StateObjectCollection<KeyedStateHandle> managedKeyedState;
-
-	private final StateObjectCollection<KeyedStateHandle> rawKeyedState;
+	private final PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskState;
 
 	private final int numKeyGroups;
 
@@ -47,8 +45,17 @@ public final class KeyGroupRangeInputSplit implements InputSplit {
 		List<KeyedStateHandle> rawKeyedState,
 		int numKeyGroups,
 		int split) {
-		this.managedKeyedState = new StateObjectCollection<>(managedKeyedState);
-		this.rawKeyedState = new StateObjectCollection<>(rawKeyedState);
+
+		this.prioritizedOperatorSubtaskState = new PrioritizedOperatorSubtaskState.Builder(
+			new OperatorSubtaskState(
+				StateObjectCollection.empty(),
+				StateObjectCollection.empty(),
+				new StateObjectCollection<>(managedKeyedState),
+				new StateObjectCollection<>(rawKeyedState)
+			),
+			Collections.emptyList()
+		).build();
+
 		this.numKeyGroups = numKeyGroups;
 		this.split = split;
 	}
@@ -59,15 +66,7 @@ public final class KeyGroupRangeInputSplit implements InputSplit {
 	}
 
 	public PrioritizedOperatorSubtaskState getPrioritizedOperatorSubtaskState() {
-		return  new PrioritizedOperatorSubtaskState.Builder(
-			new OperatorSubtaskState(
-				StateObjectCollection.empty(),
-				StateObjectCollection.empty(),
-				managedKeyedState,
-				rawKeyedState
-			),
-			Collections.emptyList()
-		).build();
+		return prioritizedOperatorSubtaskState;
 	}
 
 	public int getNumKeyGroups() {

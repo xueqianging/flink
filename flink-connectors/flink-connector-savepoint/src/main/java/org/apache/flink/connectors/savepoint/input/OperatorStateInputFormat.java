@@ -31,6 +31,7 @@ import org.apache.flink.runtime.state.DefaultOperatorStateBackendBuilder;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.streaming.api.operators.BackendRestorerProcedure;
+import org.apache.flink.util.CollectionUtil;
 import org.apache.flink.util.IOUtils;
 
 import java.io.IOException;
@@ -89,8 +90,8 @@ abstract class OperatorStateInputFormat<OT> extends SavepointInputFormat<OT, Ope
 		// We only want to output a single instance of the union state so we only need
 		// to process a single input split. An arbitrary split is chosen and
 		// sub-partitioned for better data distribution across the cluster.
-		return mapWithIndex(
-			partition(splits[0].getPrioritizedManagedOperatorState().get(0).asList(), minNumSplits),
+		return CollectionUtil.mapWithIndex(
+			CollectionUtil.partition(splits[0].getPrioritizedManagedOperatorState().get(0).asList(), minNumSplits),
 			(state, index) ->  new OperatorStateInputSplit(new StateObjectCollection<>(new ArrayList<>(state)), index)
 		).toArray(OperatorStateInputSplit[]::new);
 	}
@@ -108,7 +109,7 @@ abstract class OperatorStateInputFormat<OT> extends SavepointInputFormat<OT, Ope
 			newManagedOperatorStates,
 			newRawOperatorStates);
 
-		return mapWithIndex(
+		return CollectionUtil.mapWithIndex(
 			newManagedOperatorStates.values(),
 			(handles, index) -> new OperatorStateInputSplit(new StateObjectCollection<>(handles), index)
 		).toArray(OperatorStateInputSplit[]::new);
@@ -171,20 +172,5 @@ abstract class OperatorStateInputFormat<OT> extends SavepointInputFormat<OT, Ope
 		} catch (BackendBuildingException e) {
 			throw new RuntimeException(e);
 		}
-	}
-
-
-	/** Partition a list into approximately n buckets. */
-	private static <T> Collection<List<T>> partition(List<T> elements, int numBuckets) {
-		Map<Integer, List<T>> buckets = new HashMap<>(numBuckets);
-
-		int initialCapacity = elements.size() / numBuckets;
-		for (int i = 0; i < elements.size(); i++) {
-			buckets
-				.computeIfAbsent(i % numBuckets, key -> new ArrayList<>(initialCapacity))
-				.add(elements.get(i));
-		}
-
-		return buckets.values();
 	}
 }

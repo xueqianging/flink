@@ -28,6 +28,7 @@ import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.client.program.ClusterClient;
+import org.apache.flink.client.program.ProgramInvocationException;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.KeyedProcessWriterFunction;
 import org.apache.flink.connectors.savepoint.functions.ProcessWriterFunction;
@@ -109,7 +110,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 
 		Operator operator = Operator
 			.fromDataSet(data)
-			.assignTimestamps((account, _unused) -> account.timestamp)
+			.assignTimestamps(account -> account.timestamp)
 			.keyBy(acc -> acc.id)
 			.process(new AccountBootstrapper());
 
@@ -121,7 +122,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		bEnv.execute("Bootstrap");
 	}
 
-	private void validateBootstrap(String uid, String savepointPath) throws org.apache.flink.client.program.ProgramInvocationException {
+	private void validateBootstrap(String uid, String savepointPath) throws ProgramInvocationException {
 		StreamExecutionEnvironment sEnv = StreamExecutionEnvironment.getExecutionEnvironment();
 		sEnv.setStateBackend(backend);
 
@@ -159,7 +160,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		bEnv.execute("Modifying");
 	}
 
-	private void validateModification(String uid, String modify, String savepointPath) throws org.apache.flink.client.program.ProgramInvocationException {
+	private void validateModification(String uid, String modify, String savepointPath) throws ProgramInvocationException {
 		StreamExecutionEnvironment sEnv = StreamExecutionEnvironment.getExecutionEnvironment();
 		sEnv.setStateBackend(backend);
 
