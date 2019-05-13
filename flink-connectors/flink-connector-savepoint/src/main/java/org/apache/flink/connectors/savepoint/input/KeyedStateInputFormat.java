@@ -172,7 +172,6 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		keyedStateBackend = (AbstractKeyedStateBackend<K>) context.keyedStateBackend();
 		keys = getKeyIterator();
 
-
 		final InternalTimerService<VoidNamespace> timerService = restoreTimerService(context);
 		try {
 			ctx = ProcessReaderContext.create(USER_TIMERS_NAME, timerService, context.keyedStateBackend());

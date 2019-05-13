@@ -110,7 +110,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 
 		Operator operator = Operator
 			.fromDataSet(data)
-			.assignTimestamps(account -> account.timestamp)
+			.assignTimestamps((account, _unused) -> account.timestamp)
 			.keyBy(acc -> acc.id)
 			.process(new AccountBootstrapper());
 

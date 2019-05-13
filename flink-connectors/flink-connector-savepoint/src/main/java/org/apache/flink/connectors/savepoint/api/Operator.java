@@ -100,9 +100,11 @@ public abstract class Operator {
 			config.setOperatorID(OperatorIDGenerator.fromUid(uid));
 			config.setStateBackend(stateBackend);
 
-			BoundedOneInputStreamTaskRunner<T> operatorRunner =
-				new BoundedOneInputStreamTaskRunner<>(
-					config, timestampAssigner, maxParallelism, savepointPath);
+			BoundedOneInputStreamTaskRunner<T> operatorRunner = new BoundedOneInputStreamTaskRunner<>(
+				config,
+				timestampAssigner,
+				maxParallelism,
+				savepointPath);
 
 			return input.mapPartition(operatorRunner);
 		}

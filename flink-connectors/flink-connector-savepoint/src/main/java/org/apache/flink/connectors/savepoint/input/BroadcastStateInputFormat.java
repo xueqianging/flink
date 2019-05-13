@@ -20,9 +20,11 @@ package org.apache.flink.connectors.savepoint.input;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.state.MapStateDescriptor;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 
 import java.util.Map;
+import java.util.stream.StreamSupport;
 
 /**
  * The input format for reading {@link org.apache.flink.api.common.state.BroadcastState}.
@@ -31,7 +33,7 @@ import java.util.Map;
  * @param <V> The type of the values in the {@code BroadcastState}.
  */
 @PublicEvolving
-public class BroadcastStateInputFormat<K, V> extends OperatorStateInputFormat<Map.Entry<K, V>> {
+public class BroadcastStateInputFormat<K, V> extends OperatorStateInputFormat<Tuple2<K, V>> {
 	private final MapStateDescriptor<K, V> descriptor;
 
 	/**
@@ -47,7 +49,13 @@ public class BroadcastStateInputFormat<K, V> extends OperatorStateInputFormat<Ma
 	}
 
 	@Override
-	protected final Iterable<Map.Entry<K, V>> getElements(OperatorStateBackend restoredBackend) throws Exception {
-		return restoredBackend.getBroadcastState(descriptor).entries();
+	protected final Iterable<Tuple2<K, V>> getElements(OperatorStateBackend restoredBackend) throws Exception {
+		Iterable<Map.Entry<K, V>> entries = restoredBackend
+			.getBroadcastState(descriptor)
+			.entries();
+
+		return () -> StreamSupport.stream(entries.spliterator(), false)
+			.map(entry -> Tuple2.of(entry.getKey(), entry.getValue()))
+			.iterator();
 	}
 }

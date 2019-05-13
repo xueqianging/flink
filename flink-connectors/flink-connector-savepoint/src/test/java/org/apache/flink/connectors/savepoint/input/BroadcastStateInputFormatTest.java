@@ -20,6 +20,7 @@ package org.apache.flink.connectors.savepoint.input;
 
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.connectors.savepoint.input.splits.OperatorStateInputSplit;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.streaming.api.functions.co.BroadcastProcessFunction;
@@ -63,8 +64,8 @@ public class BroadcastStateInputFormatTest {
 			Map<Integer, Integer> results = new HashMap<>(3);
 
 			while (!format.reachedEnd()) {
-				Map.Entry<Integer, Integer> entry = format.nextRecord(null);
-				results.put(entry.getKey(), entry.getValue());
+				Tuple2<Integer, Integer> entry = format.nextRecord(null);
+				results.put(entry.f0, entry.f1);
 			}
 
 			Map<Integer, Integer> expected = new HashMap<>(3);

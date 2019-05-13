@@ -29,6 +29,8 @@ import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
@@ -57,7 +59,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -165,19 +166,19 @@ public class SavepointInputFormatITCase extends AbstractTestBase {
 
 	private void verifyBroadcastState(String savepoint, ExecutionEnvironment batchEnv) throws Exception {
 		BroadcastStateInputFormat<Integer, String> broadcastFormat = new BroadcastStateInputFormat<>(savepoint, SavepointInputFormatITCase.uid, broadcast);
-		List<Map.Entry<Integer, String>> broadcastResult = batchEnv
-			.createInput(broadcastFormat, new TypeHint<Map.Entry<Integer, String>>(){}.getTypeInfo())
+		List<Tuple2<Integer, String>> broadcastResult = batchEnv
+			.createInput(broadcastFormat, new TupleTypeInfo<>(Types.INT, Types.STRING))
 			.collect();
 
 		List<Integer> broadcastStateKeys  = broadcastResult.
 			stream()
-			.map(Map.Entry::getKey)
+			.map(entry -> entry.f0)
 			.sorted(Comparator.naturalOrder())
 			.collect(Collectors.toList());
 
 		List<String> broadcastStateValues = broadcastResult
 			.stream()
-			.map(Map.Entry::getValue)
+			.map(entry -> entry.f1)
 			.sorted(Comparator.naturalOrder())
 			.collect(Collectors.toList());
 

@@ -81,7 +81,7 @@ abstract class SavepointInputFormat<OT, T extends InputSplit> extends RichInputF
 	 * @throws IOException If the savepoint path is invalid or the uid does not exist
 	 */
 	OperatorState getOperatorState() throws IOException {
-		final Savepoint savepoint = SavepointLoader.loadSavepoint(savepointPath, getRuntimeContext().getUserCodeClassLoader());
+		final Savepoint savepoint = SavepointLoader.loadSavepoint(savepointPath, getClass().getClassLoader());
 
 		for (final OperatorState state : savepoint.getOperatorStates()) {
 			if (state.getOperatorID().equals(operatorID)) {
