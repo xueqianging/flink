@@ -88,7 +88,12 @@ public class ExistingSavepoint implements Savepoint {
 	}
 
 	@Override
-	public <T> DataSet<T> readListState(String uid, String name, TypeInformation<T> typeInfo, TypeSerializer<T> serializer) {
+	public <T> DataSet<T> readListState(
+		String uid,
+		String name,
+		TypeInformation<T> typeInfo,
+		TypeSerializer<T> serializer) {
+
 		ListStateDescriptor<T> descriptor = new ListStateDescriptor<>(name, serializer);
 		ListStateInputFormat<T> inputFormat = new ListStateInputFormat<>(existingSavepoint, uid, descriptor);
 		return env.createInput(inputFormat, typeInfo);
@@ -102,21 +107,38 @@ public class ExistingSavepoint implements Savepoint {
 	}
 
 	@Override
-	public <T> DataSet<T> readUnionState(String uid, String name, TypeInformation<T> typeInfo, TypeSerializer<T> serializer) {
+	public <T> DataSet<T> readUnionState(
+		String uid,
+		String name,
+		TypeInformation<T> typeInfo,
+		TypeSerializer<T> serializer) {
+
 		ListStateDescriptor<T> descriptor = new ListStateDescriptor<>(name, serializer);
 		UnionStateInputFormat<T> inputFormat = new UnionStateInputFormat<>(existingSavepoint, uid, descriptor);
 		return env.createInput(inputFormat, typeInfo);
 	}
 
 	@Override
-	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(String uid, String name, TypeInformation<K> keyTypeInfo, TypeInformation<V> valueTypeInfo) {
+	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(
+		String uid,
+		String name,
+		TypeInformation<K> keyTypeInfo,
+		TypeInformation<V> valueTypeInfo) {
+
 		MapStateDescriptor<K, V> descriptor = new MapStateDescriptor<>(name, keyTypeInfo, valueTypeInfo);
 		BroadcastStateInputFormat<K, V> inputFormat = new BroadcastStateInputFormat<>(existingSavepoint, uid, descriptor);
 		return env.createInput(inputFormat, new TupleTypeInfo<>(keyTypeInfo, valueTypeInfo));
 	}
 
 	@Override
-	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(String uid, String name, TypeInformation<K> keyTypeInfo, TypeInformation<V> valueTypeInfo, TypeSerializer<K> keySerializer, TypeSerializer<V> valueSerializer) {
+	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(
+		String uid,
+		String name,
+		TypeInformation<K> keyTypeInfo,
+		TypeInformation<V> valueTypeInfo,
+		TypeSerializer<K> keySerializer,
+		TypeSerializer<V> valueSerializer) {
+
 		MapStateDescriptor<K, V> descriptor = new MapStateDescriptor<>(name, keySerializer, valueSerializer);
 		BroadcastStateInputFormat<K, V> inputFormat = new BroadcastStateInputFormat<>(existingSavepoint, uid, descriptor);
 		return env.createInput(inputFormat, new TupleTypeInfo<>(keyTypeInfo, valueTypeInfo));
@@ -124,6 +146,7 @@ public class ExistingSavepoint implements Savepoint {
 
 	@Override
 	public <K, OUT> DataSet<OUT> readKeyedState(String uid, ProcessReaderFunction<K, OUT> function) {
+
 		TypeInformation<K> keyTypeInfo;
 		TypeInformation<OUT> outType;
 
@@ -157,8 +180,19 @@ public class ExistingSavepoint implements Savepoint {
 	}
 
 	@Override
-	public <K, OUT> DataSet<OUT> readKeyedState(String uid, ProcessReaderFunction<K, OUT> function, TypeInformation<K> keyTypeInfo, TypeInformation<OUT> outTypeInfo) {
-		KeyedStateInputFormat<K, OUT> inputFormat = new KeyedStateInputFormat<>(existingSavepoint, uid, stateBackend, keyTypeInfo, function);
+	public <K, OUT> DataSet<OUT> readKeyedState(
+		String uid,
+		ProcessReaderFunction<K, OUT> function,
+		TypeInformation<K> keyTypeInfo,
+		TypeInformation<OUT> outTypeInfo) {
+
+		KeyedStateInputFormat<K, OUT> inputFormat = new KeyedStateInputFormat<>(
+			existingSavepoint,
+			uid,
+			stateBackend,
+			keyTypeInfo,
+			function);
+
 		return env.createInput(inputFormat, outTypeInfo);
 	}
 
@@ -236,12 +270,12 @@ public class ExistingSavepoint implements Savepoint {
 		}
 
 		@Override
-		public boolean reachedEnd() throws IOException {
+		public boolean reachedEnd() {
 			return !inner.hasNext();
 		}
 
 		@Override
-		public OperatorState nextRecord(OperatorState reuse) throws IOException {
+		public OperatorState nextRecord(OperatorState reuse) {
 			return inner.next();
 		}
 	}

@@ -55,7 +55,12 @@ public class NewSavepoint implements Savepoint {
 	}
 
 	@Override
-	public <T> DataSet<T> readListState(String uid, String name, TypeInformation<T> typeInfo, TypeSerializer<T> serializer) {
+	public <T> DataSet<T> readListState(
+		String uid,
+		String name,
+		TypeInformation<T> typeInfo,
+		TypeSerializer<T> serializer) {
+
 		throw new IllegalStateException("State can only be read from an existing savepoint");
 	}
 
@@ -65,17 +70,34 @@ public class NewSavepoint implements Savepoint {
 	}
 
 	@Override
-	public <T> DataSet<T> readUnionState(String uid, String name, TypeInformation<T> typeInfo, TypeSerializer<T> serializer) {
+	public <T> DataSet<T> readUnionState(
+		String uid,
+		String name,
+		TypeInformation<T> typeInfo,
+		TypeSerializer<T> serializer) {
+
 		throw new IllegalStateException("State can only be read from an existing savepoint");
 	}
 
 	@Override
-	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(String uid, String name, TypeInformation<K> keyTypeInfo, TypeInformation<V> valueTypeInfo) {
+	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(
+		String uid,
+		String name,
+		TypeInformation<K> keyTypeInfo,
+		TypeInformation<V> valueTypeInfo) {
+
 		throw new IllegalStateException("State can only be read from an existing savepoint");
 	}
 
 	@Override
-	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(String uid, String name, TypeInformation<K> keyTypeInfo, TypeInformation<V> valueTypeInfo, TypeSerializer<K> keySerializer, TypeSerializer<V> valueSerializer) {
+	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(
+		String uid,
+		String name,
+		TypeInformation<K> keyTypeInfo,
+		TypeInformation<V> valueTypeInfo,
+		TypeSerializer<K> keySerializer,
+		TypeSerializer<V> valueSerializer) {
+
 		throw new IllegalStateException("State can only be read from an existing savepoint");
 	}
 
@@ -85,7 +107,12 @@ public class NewSavepoint implements Savepoint {
 	}
 
 	@Override
-	public <K, OUT> DataSet<OUT> readKeyedState(String uid, ProcessReaderFunction<K, OUT> function, TypeInformation<K> keyTypeInfo, TypeInformation<OUT> outTypeInfo) {
+	public <K, OUT> DataSet<OUT> readKeyedState(
+		String uid,
+		ProcessReaderFunction<K, OUT> function,
+		TypeInformation<K> keyTypeInfo,
+		TypeInformation<OUT> outTypeInfo) {
+
 		throw new IllegalStateException("State can only be read from an existing savepoint");
 	}
 

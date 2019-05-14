@@ -19,7 +19,7 @@
 package org.apache.flink.connectors.savepoint.operators;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.connectors.savepoint.functions.KeyedProcessWriterFunction;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.runtime.VoidTriggerable;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
@@ -29,24 +29,22 @@ import org.apache.flink.streaming.api.operators.AbstractUdfStreamOperator;
 import org.apache.flink.streaming.api.operators.InternalTimerService;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-
-import static org.apache.flink.util.Preconditions.checkNotNull;
-import static org.apache.flink.util.Preconditions.checkState;
+import org.apache.flink.util.Preconditions;
 
 /**
  * A {@link org.apache.flink.streaming.api.operators.StreamOperator} for executing {@link
- * KeyedProcessWriterFunction}'s.
+ * KeyedStateBootstrapFunction}'s.
  */
 @Internal
-public class KeyedProcessWriterOperator<K, IN>
-	extends AbstractUdfStreamOperator<Void, KeyedProcessWriterFunction<K, IN>>
+public class KeyedStateBootstrapOperator<K, IN>
+	extends AbstractUdfStreamOperator<Void, KeyedStateBootstrapFunction<K, IN>>
 	implements OneInputStreamOperator<IN, Void> {
 
 	private static final long serialVersionUID = 1L;
 
-	private transient KeyedProcessWriterOperator<K, IN>.ContextImpl context;
+	private transient KeyedStateBootstrapOperator<K, IN>.ContextImpl context;
 
-	public KeyedProcessWriterOperator(KeyedProcessWriterFunction<K, IN> function) {
+	public KeyedStateBootstrapOperator(KeyedStateBootstrapFunction<K, IN> function) {
 		super(function);
 	}
 
@@ -61,7 +59,7 @@ public class KeyedProcessWriterOperator<K, IN>
 
 		TimerService timerService = new SimpleTimerService(internalTimerService);
 
-		context = new KeyedProcessWriterOperator<K, IN>.ContextImpl(userFunction, timerService);
+		context = new KeyedStateBootstrapOperator<K, IN>.ContextImpl(userFunction, timerService);
 	}
 
 	@Override
@@ -71,20 +69,20 @@ public class KeyedProcessWriterOperator<K, IN>
 		context.element = null;
 	}
 
-	private class ContextImpl extends KeyedProcessWriterFunction<K, IN>.Context {
+	private class ContextImpl extends KeyedStateBootstrapFunction<K, IN>.Context {
 
 		private final TimerService timerService;
 
 		private StreamRecord<IN> element;
 
-		ContextImpl(KeyedProcessWriterFunction<K, IN> function, TimerService timerService) {
+		ContextImpl(KeyedStateBootstrapFunction<K, IN> function, TimerService timerService) {
 			function.super();
-			this.timerService = checkNotNull(timerService);
+			this.timerService = Preconditions.checkNotNull(timerService);
 		}
 
 		@Override
 		public Long timestamp() {
-			checkState(element != null);
+			Preconditions.checkState(element != null);
 
 			if (element.hasTimestamp()) {
 				return element.getTimestamp();
@@ -101,7 +99,7 @@ public class KeyedProcessWriterOperator<K, IN>
 		@Override
 		@SuppressWarnings("unchecked")
 		public K getCurrentKey() {
-			return (K) KeyedProcessWriterOperator.this.getCurrentKey();
+			return (K) KeyedStateBootstrapOperator.this.getCurrentKey();
 		}
 	}
 }

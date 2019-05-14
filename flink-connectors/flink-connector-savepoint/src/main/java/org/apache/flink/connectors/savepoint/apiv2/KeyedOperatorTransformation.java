@@ -24,8 +24,8 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.connectors.savepoint.api.Savepoint;
-import org.apache.flink.connectors.savepoint.functions.KeyedProcessWriterFunction;
-import org.apache.flink.connectors.savepoint.operators.KeyedProcessWriterOperator;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
+import org.apache.flink.connectors.savepoint.operators.KeyedStateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
 import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -63,16 +63,16 @@ public class KeyedOperatorTransformation<K, T> {
 	}
 
 	/**
-	 * Applies the given {@link KeyedProcessWriterFunction} on the keyed input.
+	 * Applies the given {@link KeyedStateBootstrapFunction} on the keyed input.
 	 *
 	 * <p>The function will be called for every element in the input and can be used for writing both
 	 * keyed and operator state into a {@link Savepoint}.
 	 *
-	 * @param processFunction The {@link KeyedProcessWriterFunction} that is called for each element.
+	 * @param processFunction The {@link KeyedStateBootstrapFunction} that is called for each element.
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public OperatorTransformation process(KeyedProcessWriterFunction<K, T> processFunction) {
-		KeyedProcessWriterOperator<K, T> operator = new KeyedProcessWriterOperator<>(processFunction);
+	public OperatorTransformation process(KeyedStateBootstrapFunction<K, T> processFunction) {
+		KeyedStateBootstrapOperator<K, T> operator = new KeyedStateBootstrapOperator<>(processFunction);
 
 		return transform(operator);
 	}

@@ -28,8 +28,8 @@ import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.connectors.savepoint.api.Savepoint;
-import org.apache.flink.connectors.savepoint.functions.ProcessWriterFunction;
-import org.apache.flink.connectors.savepoint.operators.ProcessWriterOperator;
+import org.apache.flink.connectors.savepoint.functions.StateBootstapFunction;
+import org.apache.flink.connectors.savepoint.operators.StateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
 import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -75,16 +75,16 @@ public class OneInputOperatorTransformation<T> {
 	}
 
 	/**
-	 * Applies the given {@link ProcessWriterFunction} on the non-keyed input.
+	 * Applies the given {@link StateBootstapFunction} on the non-keyed input.
 	 *
 	 * <p>The function will be called for every element in the input and can be used for writing
 	 * operator state into a {@link Savepoint}.
 	 *
-	 * @param processFunction The {@link ProcessWriterFunction} that is called for each element.
+	 * @param processFunction The {@link StateBootstapFunction} that is called for each element.
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public OperatorTransformation process(ProcessWriterFunction<T> processFunction) {
-		ProcessWriterOperator<T> operator = new ProcessWriterOperator<>(processFunction);
+	public OperatorTransformation process(StateBootstapFunction<T> processFunction) {
+		StateBootstrapOperator<T> operator = new StateBootstrapOperator<>(processFunction);
 
 		return transform(operator);
 	}

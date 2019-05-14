@@ -136,7 +136,9 @@ public interface Savepoint {
 		TypeInformation<V> valueTypeInfo);
 
 	/**
-	 * Read operator {@code BroadcastState} from a {@code Savepoint}.
+	 * Read operator {@code BroadcastState} from a {@code Savepoint}
+	 * when a custom serializer was used; e.g., a different serializer
+	 * than the one returned by {@code TypeInformation#createSerializer}.
 	 * @param uid The uid of the operator.
 	 * @param name The (unique) name for the state.
 	 * @param keyTypeInfo The type information for the keys in the state.

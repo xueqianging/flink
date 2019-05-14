@@ -65,9 +65,11 @@ public abstract class OperatorTransformation {
 
 		private final StreamConfig config;
 
-		@Nullable private final HashSelector<T> keySelector;
+		@Nullable
+		private final HashSelector<T> keySelector;
 
-		@Nullable private final TimestampAssigner<T> timestampAssigner;
+		@Nullable
+		private final TimestampAssigner<T> timestampAssigner;
 
 		OneInput(DataSet<T> dataSet, StreamConfig config, @Nullable TimestampAssigner<T> timestampAssigner) {
 			this.dataSet = dataSet;

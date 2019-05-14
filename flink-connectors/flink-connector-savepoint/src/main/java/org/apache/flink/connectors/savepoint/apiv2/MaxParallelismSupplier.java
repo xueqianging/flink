@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  * on the classpath.
  */
 @FunctionalInterface
-public interface MaxParallelismSupplier extends Supplier<Integer>, Serializable {
+interface MaxParallelismSupplier extends Supplier<Integer>, Serializable {
 
 	/**
 	 * A supplier for known max parallelism.

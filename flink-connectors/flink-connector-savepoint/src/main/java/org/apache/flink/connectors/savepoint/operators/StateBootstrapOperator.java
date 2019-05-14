@@ -19,7 +19,7 @@
 package org.apache.flink.connectors.savepoint.operators;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.connectors.savepoint.functions.ProcessWriterFunction;
+import org.apache.flink.connectors.savepoint.functions.StateBootstapFunction;
 import org.apache.flink.streaming.api.operators.AbstractUdfStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -28,18 +28,18 @@ import org.apache.flink.util.Preconditions;
 
 /**
  * A {@link org.apache.flink.streaming.api.operators.StreamOperator} for executing {@link
- * ProcessWriterFunction}'s.
+ * StateBootstapFunction}'s.
  */
 @Internal
-public class ProcessWriterOperator<IN>
-	extends AbstractUdfStreamOperator<Void, ProcessWriterFunction<IN>>
+public class StateBootstrapOperator<IN>
+	extends AbstractUdfStreamOperator<Void, StateBootstapFunction<IN>>
 	implements OneInputStreamOperator<IN, Void> {
 
 	private static final long serialVersionUID = 1L;
 
 	private ContextImpl context;
 
-	public ProcessWriterOperator(ProcessWriterFunction<IN> function) {
+	public StateBootstrapOperator(StateBootstapFunction<IN> function) {
 		super(function);
 	}
 
@@ -55,7 +55,7 @@ public class ProcessWriterOperator<IN>
 		userFunction.processElement(element.getValue(), context);
 	}
 
-	private class ContextImpl implements ProcessWriterFunction.Context {
+	private class ContextImpl implements StateBootstapFunction.Context {
 		private final ProcessingTimeService processingTimeService;
 
 		private StreamRecord<IN> element;

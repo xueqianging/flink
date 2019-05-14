@@ -29,7 +29,7 @@ import org.apache.flink.streaming.api.TimerService;
  * <p>For every element {@link #processElement(Object, Context)} is invoked. This can write data to
  * state and set timers.
  *
- * <p><b>NOTE:</b> A {@code KeyedProcessWriterFunction} is always a {@link
+ * <p><b>NOTE:</b> A {@code KeyedStateBootstrapFunction} is always a {@link
  * org.apache.flink.api.common.functions.RichFunction}. Therefore, access to the {@link
  * org.apache.flink.api.common.functions.RuntimeContext} is always available and setup and teardown
  * methods can be implemented. See {@link
@@ -40,7 +40,7 @@ import org.apache.flink.streaming.api.TimerService;
  * @param <IN> Type of the input.
  */
 @PublicEvolving
-public abstract class KeyedProcessWriterFunction<K, IN> extends AbstractRichFunction {
+public abstract class KeyedStateBootstrapFunction<K, IN> extends AbstractRichFunction {
 
 	/**
 	 * Process one element from the input stream.

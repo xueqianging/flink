@@ -28,7 +28,7 @@ import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
  * @param <IN> The type of the input.
  */
 @PublicEvolving
-public abstract class ProcessWriterFunction<IN> extends AbstractRichFunction implements CheckpointedFunction {
+public abstract class StateBootstapFunction<IN> extends AbstractRichFunction implements CheckpointedFunction {
 
 	/**
 	 * Writes the given value to operator state. This function is called for every record.
@@ -40,11 +40,11 @@ public abstract class ProcessWriterFunction<IN> extends AbstractRichFunction imp
 	public abstract void processElement(IN value, Context ctx) throws Exception;
 
 	/**
-	 * Context that {@link ProcessWriterFunction}'s can use for getting additional data about an input
+	 * Context that {@link StateBootstapFunction}'s can use for getting additional data about an input
 	 * record.
 	 *
 	 * <p>The context is only valid for the duration of a {@link
-	 * ProcessWriterFunction#processElement(Object, Context)} call. Do not store the context and use
+	 * StateBootstapFunction#processElement(Object, Context)} call. Do not store the context and use
 	 * afterwards!
 	 */
 	public interface Context {

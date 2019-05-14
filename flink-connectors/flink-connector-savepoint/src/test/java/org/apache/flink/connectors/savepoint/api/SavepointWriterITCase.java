@@ -30,7 +30,7 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.ProgramInvocationException;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connectors.savepoint.functions.KeyedProcessWriterFunction;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.functions.ProcessWriterFunction;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.jobgraph.JobGraph;
@@ -218,7 +218,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 	/**
 	 * A savepoint writer function.
 	 */
-	public static class AccountBootstrapper extends KeyedProcessWriterFunction<Integer, Account> {
+	public static class AccountBootstrapper extends KeyedStateBootstrapFunction<Integer, Account> {
 		ValueState<Double> state;
 
 		@Override
