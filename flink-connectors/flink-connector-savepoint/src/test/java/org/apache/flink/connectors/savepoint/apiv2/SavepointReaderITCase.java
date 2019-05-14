@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.input;
+package org.apache.flink.connectors.savepoint.apiv2;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobSubmissionResult;
@@ -29,7 +29,6 @@ import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
@@ -65,7 +64,7 @@ import java.util.stream.Collectors;
 /**
  * IT case for reading state.
  */
-public class SavepointInputFormatITCase extends AbstractTestBase {
+public class SavepointReaderITCase extends AbstractTestBase {
 	private static final String uid = "stateful-operator";
 
 	private static ListStateDescriptor<Integer> list = new ListStateDescriptor<>("list", Types.INT);
@@ -130,12 +129,13 @@ public class SavepointInputFormatITCase extends AbstractTestBase {
 
 		JobGraph jobGraph = streamEnv.getStreamGraph().getJobGraph();
 
-		String savepoint = takeSavepoint(jobGraph);
+		String path = takeSavepoint(jobGraph);
 
 		ExecutionEnvironment batchEnv = ExecutionEnvironment.getExecutionEnvironment();
+		Savepoint savepoint = Savepoint.load(batchEnv, path, backend);
 
-		List<Integer> results = batchEnv
-			.createInput(new KeyedStateInputFormat<>(savepoint, uid, backend, Types.INT, new Reader()), Types.INT)
+		List<Integer> results = savepoint
+			.readKeyedState(uid, new Reader())
 			.collect();
 
 		results.sort(Comparator.naturalOrder());
@@ -145,28 +145,26 @@ public class SavepointInputFormatITCase extends AbstractTestBase {
 		Assert.assertEquals("Unexpected results from keyed state", expected, results);
 	}
 
-	private void verifyListState(String savepoint, ExecutionEnvironment batchEnv) throws Exception {
-		ListStateInputFormat<Integer> listInput = new ListStateInputFormat<>(savepoint, SavepointInputFormatITCase.uid, list);
-
-		List<Integer> listResult = batchEnv.createInput(listInput, Types.INT).collect();
+	private void verifyListState(String path, ExecutionEnvironment batchEnv) throws Exception {
+		Savepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
+		List<Integer> listResult = savepoint.readListState(uid, "list", Types.INT).collect();
 		listResult.sort(Comparator.naturalOrder());
 
 		Assert.assertEquals("Unexpected elements read from list state", SavepointSource.getElements(), listResult);
 	}
 
-	private void verifyUnionState(String savepoint, ExecutionEnvironment batchEnv) throws Exception {
-		UnionStateInputFormat<Integer> unionInput = new UnionStateInputFormat<>(savepoint, SavepointInputFormatITCase.uid, union);
-
-		List<Integer> unionResult = batchEnv.createInput(unionInput, Types.INT).collect();
+	private void verifyUnionState(String path, ExecutionEnvironment batchEnv) throws Exception {
+		Savepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
+		List<Integer> unionResult = savepoint.readUnionState(uid, "union", Types.INT).collect();
 		unionResult.sort(Comparator.naturalOrder());
 
 		Assert.assertEquals("Unexpected elements read from union state", SavepointSource.getElements(), unionResult);
 	}
 
-	private void verifyBroadcastState(String savepoint, ExecutionEnvironment batchEnv) throws Exception {
-		BroadcastStateInputFormat<Integer, String> broadcastFormat = new BroadcastStateInputFormat<>(savepoint, SavepointInputFormatITCase.uid, broadcast);
-		List<Tuple2<Integer, String>> broadcastResult = batchEnv
-			.createInput(broadcastFormat, new TupleTypeInfo<>(Types.INT, Types.STRING))
+	private void verifyBroadcastState(String path, ExecutionEnvironment batchEnv) throws Exception {
+		Savepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
+		List<Tuple2<Integer, String>> broadcastResult = savepoint
+			.readBroadcastState(uid, "broadcast", Types.INT, Types.STRING)
 			.collect();
 
 		List<Integer> broadcastStateKeys  = broadcastResult.
@@ -204,7 +202,7 @@ public class SavepointInputFormatITCase extends AbstractTestBase {
 
 		try {
 			client.setDetached(true);
-			JobSubmissionResult result = client.submitJob(jobGraph, SavepointInputFormatITCase.class.getClassLoader());
+			JobSubmissionResult result = client.submitJob(jobGraph, SavepointReaderITCase.class.getClassLoader());
 
 			boolean finished = false;
 			while (deadline.hasTimeLeft()) {
@@ -339,7 +337,7 @@ public class SavepointInputFormatITCase extends AbstractTestBase {
 		}
 
 		@Override
-		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
+		public void processKey(Integer key, Context ctx, Collector<Integer> out) throws Exception {
 			out.collect(state.value());
 		}
 	}

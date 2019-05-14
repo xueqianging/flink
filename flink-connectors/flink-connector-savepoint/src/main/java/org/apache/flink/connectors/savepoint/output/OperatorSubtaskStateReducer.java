@@ -21,12 +21,14 @@ package org.apache.flink.connectors.savepoint.output;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.RichGroupReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.util.Collector;
 
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -37,13 +39,23 @@ import java.util.stream.StreamSupport;
 @Internal
 public class OperatorSubtaskStateReducer
 	extends RichGroupReduceFunction<Tuple2<Integer, OperatorSubtaskState>, OperatorState> {
+
 	private final String uid;
 
-	private final int maxParallelism;
+	private final Supplier<Integer> maxParallelismSupplier;
 
-	public OperatorSubtaskStateReducer(String uid, int maxParallelism) {
+	private int maxParallelism;
+
+	public OperatorSubtaskStateReducer(String uid, Supplier<Integer> maxParallelismSupplier) {
 		this.uid = uid;
-		this.maxParallelism = maxParallelism;
+		this.maxParallelismSupplier = maxParallelismSupplier;
+	}
+
+	@Override
+	public void open(Configuration parameters) throws Exception {
+		super.open(parameters);
+
+		maxParallelism = maxParallelismSupplier.get();
 	}
 
 	@Override

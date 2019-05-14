@@ -21,6 +21,8 @@ package org.apache.flink.connectors.savepoint.output;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connectors.savepoint.apiv2.MaxParallelismSupplier;
 import org.apache.flink.connectors.savepoint.runtime.SavepointEnvironment;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
@@ -47,24 +49,32 @@ public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunctio
 	@Nullable
 	private final TimestampAssigner<IN> timestampAssigner;
 
-	private final int maxParallelism;
+	private final MaxParallelismSupplier supplier;
 
 	private final Path savepointPath;
+
+	private int maxParallelism;
 
 	/**
 	 * Create a new {@link BoundedOneInputStreamTaskRunner}.
 	 *
 	 * @param streamConfig The internal configuration for the task.
 	 * @param timestampAssigner An optional timestamp assigner for the records.
-	 * @param maxParallelism The max parallelism of the operator. Equivalent to setting {@link
+	 * @param supplier Provides the max parallelism of the operator. Equivalent to setting {@link
 	 *     org.apache.flink.streaming.api.environment.StreamExecutionEnvironment#setMaxParallelism(int)}.
 	 * @param savepointPath The directory where the savepoint should be written.
 	 */
-	public BoundedOneInputStreamTaskRunner(StreamConfig streamConfig, @Nullable TimestampAssigner<IN> timestampAssigner, int maxParallelism, Path savepointPath) {
+	public BoundedOneInputStreamTaskRunner(StreamConfig streamConfig, @Nullable TimestampAssigner<IN> timestampAssigner, MaxParallelismSupplier supplier, Path savepointPath) {
 		this.streamConfig = streamConfig;
 		this.timestampAssigner = timestampAssigner;
-		this.maxParallelism = maxParallelism;
+		this.supplier = supplier;
 		this.savepointPath = savepointPath;
+	}
+
+	@Override
+	public void open(Configuration parameters) throws Exception {
+		super.open(parameters);
+		maxParallelism = supplier.get();
 	}
 
 	@Override

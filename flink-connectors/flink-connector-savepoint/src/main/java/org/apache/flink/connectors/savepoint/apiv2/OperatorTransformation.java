@@ -16,11 +16,12 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.api;
+package org.apache.flink.connectors.savepoint.apiv2;
 
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connectors.savepoint.api.Savepoint;
 import org.apache.flink.connectors.savepoint.output.BoundedOneInputStreamTaskRunner;
 import org.apache.flink.connectors.savepoint.output.partitioner.HashSelector;
 import org.apache.flink.connectors.savepoint.output.partitioner.KeyGroupRangePartitioner;
@@ -34,30 +35,31 @@ import org.apache.flink.streaming.api.graph.StreamConfig;
 import javax.annotation.Nullable;
 
 /**
- * An Operator represents a single operator within a {@link Savepoint}.
+ * An OperatorTransformation represents a single operator within a {@link Savepoint}.
  */
-public abstract class Operator {
+@SuppressWarnings("WeakerAccess")
+public abstract class OperatorTransformation {
 
 	/**
-	 * Create a new {@link Operator} from a {@link DataSet}.
+	 * Create a new {@link OperatorTransformation} from a {@link DataSet}.
 	 *
 	 * @param dataSet A dataset of elements.
 	 * @param <T> The type of the input.
-	 * @return A {@link OneInputOperator}.
+	 * @return A {@link OneInputOperatorTransformation}.
 	 */
-	public static <T> OneInputOperator<T> fromDataSet(DataSet<T> dataSet) {
-		return new OneInputOperator<>(dataSet);
+	public static <T> OneInputOperatorTransformation<T> fromDataSet(DataSet<T> dataSet) {
+		return new OneInputOperatorTransformation<>(dataSet);
 	}
 
-	private Operator() {}
+	private OperatorTransformation() {}
 
 	abstract DataSet<Tuple2<Integer, OperatorSubtaskState>> getOperatorSubtaskStates(
 		String uid,
 		StateBackend stateBackend,
-		int maxParallelism,
+		MaxParallelismSupplier supplier,
 		Path savepointPath);
 
-	static class OneInput<T> extends Operator {
+	static class OneInput<T> extends OperatorTransformation {
 
 		private final DataSet<T> dataSet;
 
@@ -89,11 +91,11 @@ public abstract class Operator {
 		DataSet<Tuple2<Integer, OperatorSubtaskState>> getOperatorSubtaskStates(
 			String uid,
 			StateBackend stateBackend,
-			int maxParallelism,
+			MaxParallelismSupplier supplier,
 			Path savepointPath) {
 			DataSet<T> input = dataSet;
 			if (keySelector != null) {
-				input = dataSet.partitionCustom(new KeyGroupRangePartitioner(() -> maxParallelism), keySelector);
+				input = dataSet.partitionCustom(new KeyGroupRangePartitioner(supplier), keySelector);
 			}
 
 			config.setOperatorName(uid);
@@ -103,7 +105,7 @@ public abstract class Operator {
 			BoundedOneInputStreamTaskRunner<T> operatorRunner = new BoundedOneInputStreamTaskRunner<>(
 				config,
 				timestampAssigner,
-				() -> maxParallelism,
+				supplier,
 				savepointPath);
 
 			return input.mapPartition(operatorRunner);

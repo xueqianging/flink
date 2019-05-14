@@ -171,7 +171,7 @@ public class Savepoint {
 	private DataSet<OperatorState> getOperatorStates(String uid, Operator operator, Path savepointPath) {
 		return operator
 			.getOperatorSubtaskStates(uid, stateBackend, maxParallelism, savepointPath)
-			.reduceGroup(new OperatorSubtaskStateReducer(uid, maxParallelism));
+			.reduceGroup(new OperatorSubtaskStateReducer(uid, () -> maxParallelism));
 	}
 
 	private DataSet<OperatorState> addExistingOperatorState(DataSet<OperatorState> newOperators) {
