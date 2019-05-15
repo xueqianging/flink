@@ -18,7 +18,7 @@
 
 package org.apache.flink.connectors.savepoint.input;
 
-import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.state.OperatorStateBackend;
@@ -32,7 +32,7 @@ import java.util.stream.StreamSupport;
  * @param <K> The type of the keys in the {@code BroadcastState}.
  * @param <V> The type of the values in the {@code BroadcastState}.
  */
-@PublicEvolving
+@Internal
 public class BroadcastStateInputFormat<K, V> extends OperatorStateInputFormat<Tuple2<K, V>> {
 	private final MapStateDescriptor<K, V> descriptor;
 

@@ -18,7 +18,7 @@
 
 package org.apache.flink.connectors.savepoint.input;
 
-import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 
@@ -27,7 +27,7 @@ import org.apache.flink.runtime.state.OperatorStateBackend;
  *
  * @param <OT> The generic type of the state
  */
-@PublicEvolving
+@Internal
 public class UnionStateInputFormat <OT> extends OperatorStateInputFormat<OT> {
 
 	private final ListStateDescriptor<OT> descriptor;

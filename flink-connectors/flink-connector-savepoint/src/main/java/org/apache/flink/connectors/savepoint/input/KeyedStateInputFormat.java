@@ -18,7 +18,7 @@
 
 package org.apache.flink.connectors.savepoint.input;
 
-import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.functions.util.FunctionUtils;
 import org.apache.flink.api.common.state.StateDescriptor;
@@ -66,7 +66,7 @@ import java.util.List;
  * @param <K> The type of the key.
  * @param <OUT> The type of the output of the {@link ProcessReaderFunction}.
  */
-@PublicEvolving
+@Internal
 public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, KeyGroupRangeInputSplit> implements KeyContext {
 
 	private static final String USER_TIMERS_NAME = "user-timers";
