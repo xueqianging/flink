@@ -132,7 +132,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 		String path = takeSavepoint(jobGraph);
 
 		ExecutionEnvironment batchEnv = ExecutionEnvironment.getExecutionEnvironment();
-		Savepoint savepoint = Savepoint.load(batchEnv, path, backend);
+		ExistingSavepoint savepoint = Savepoint.load(batchEnv, path, backend);
 
 		List<Integer> results = savepoint
 			.readKeyedState(uid, new Reader())
@@ -146,7 +146,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 	}
 
 	private void verifyListState(String path, ExecutionEnvironment batchEnv) throws Exception {
-		Savepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
+		ExistingSavepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
 		List<Integer> listResult = savepoint.readListState(uid, "list", Types.INT).collect();
 		listResult.sort(Comparator.naturalOrder());
 
@@ -154,7 +154,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 	}
 
 	private void verifyUnionState(String path, ExecutionEnvironment batchEnv) throws Exception {
-		Savepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
+		ExistingSavepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
 		List<Integer> unionResult = savepoint.readUnionState(uid, "union", Types.INT).collect();
 		unionResult.sort(Comparator.naturalOrder());
 
@@ -162,7 +162,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 	}
 
 	private void verifyBroadcastState(String path, ExecutionEnvironment batchEnv) throws Exception {
-		Savepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
+		ExistingSavepoint savepoint = Savepoint.load(batchEnv, path, new MemoryStateBackend());
 		List<Tuple2<Integer, String>> broadcastResult = savepoint
 			.readBroadcastState(uid, "broadcast", Types.INT, Types.STRING)
 			.collect();

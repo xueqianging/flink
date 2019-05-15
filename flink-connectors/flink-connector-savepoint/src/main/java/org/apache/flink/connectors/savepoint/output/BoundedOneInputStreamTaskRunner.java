@@ -22,7 +22,6 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connectors.savepoint.apiv2.MaxParallelismSupplier;
 import org.apache.flink.connectors.savepoint.runtime.SavepointEnvironment;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;

@@ -88,7 +88,7 @@ abstract class OperatorStateInputFormat<OT> extends SavepointInputFormat<OT, Ope
 		}
 
 		// We only want to output a single instance of the union state so we only need
-		// to process a single input split. An arbitrary split is chosen and
+		// to transform a single input split. An arbitrary split is chosen and
 		// sub-partitioned for better data distribution across the cluster.
 		return CollectionUtil.mapWithIndex(
 			CollectionUtil.partition(splits[0].getPrioritizedManagedOperatorState().get(0).asList(), minNumSplits),

@@ -102,7 +102,7 @@
  *
  * transactions
  *      .connect(rates)
- *      .process(new CurrencyConverter())
+ *      .transform(new CurrencyConverter())
  *      .uid("currency_converter")
  *      .keyBy(transaction -> transaction.accountId)
  *      .flatMap(new Summarize())

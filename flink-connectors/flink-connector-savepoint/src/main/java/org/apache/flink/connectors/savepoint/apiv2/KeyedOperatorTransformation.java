@@ -23,7 +23,6 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.connectors.savepoint.api.Savepoint;
 import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.operators.KeyedStateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
@@ -71,7 +70,7 @@ public class KeyedOperatorTransformation<K, T> {
 	 * @param processFunction The {@link KeyedStateBootstrapFunction} that is called for each element.
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public OperatorTransformation process(KeyedStateBootstrapFunction<K, T> processFunction) {
+	public BootstrapTransformation<T> transform(KeyedStateBootstrapFunction<K, T> processFunction) {
 		KeyedStateBootstrapOperator<K, T> operator = new KeyedStateBootstrapOperator<>(processFunction);
 
 		return transform(operator);
@@ -86,14 +85,14 @@ public class KeyedOperatorTransformation<K, T> {
 	 * @param operator The object containing the transformation logic type of the return stream
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public OperatorTransformation transform(OneInputStreamOperator<T, ?> operator) {
+	public BootstrapTransformation<T> transform(OneInputStreamOperator<T, ?> operator) {
 		TypeSerializer<K> keySerializer =
 			keyType.createSerializer(dataSet.getExecutionEnvironment().getConfig());
 
 		StreamConfig config = new BoundedStreamConfig(keySerializer, keySelector);
 		config.setStreamOperator(operator);
 
-		return new OperatorTransformation.OneInput<>(dataSet, config, keySelector, timestampAssigner);
+		return new BootstrapTransformation<>(dataSet, config, keySelector, timestampAssigner);
 	}
 }
 

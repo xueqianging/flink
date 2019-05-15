@@ -18,26 +18,14 @@
 
 package org.apache.flink.connectors.savepoint.apiv2;
 
+import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.connectors.savepoint.api.Savepoint;
-import org.apache.flink.connectors.savepoint.output.BoundedOneInputStreamTaskRunner;
-import org.apache.flink.connectors.savepoint.output.partitioner.HashSelector;
-import org.apache.flink.connectors.savepoint.output.partitioner.KeyGroupRangePartitioner;
-import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
-import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.streaming.api.functions.TimestampAssigner;
-import org.apache.flink.streaming.api.graph.StreamConfig;
-
-import javax.annotation.Nullable;
 
 /**
  * An OperatorTransformation represents a single operator within a {@link Savepoint}.
  */
 @SuppressWarnings("WeakerAccess")
+@PublicEvolving
 public abstract class OperatorTransformation {
 
 	/**
@@ -47,71 +35,8 @@ public abstract class OperatorTransformation {
 	 * @param <T> The type of the input.
 	 * @return A {@link OneInputOperatorTransformation}.
 	 */
-	public static <T> OneInputOperatorTransformation<T> fromDataSet(DataSet<T> dataSet) {
+	public static <T> OneInputOperatorTransformation<T> bootstrapWith(DataSet<T> dataSet) {
 		return new OneInputOperatorTransformation<>(dataSet);
-	}
-
-	private OperatorTransformation() {}
-
-	abstract DataSet<Tuple2<Integer, OperatorSubtaskState>> getOperatorSubtaskStates(
-		String uid,
-		StateBackend stateBackend,
-		MaxParallelismSupplier supplier,
-		Path savepointPath);
-
-	static class OneInput<T> extends OperatorTransformation {
-
-		private final DataSet<T> dataSet;
-
-		private final StreamConfig config;
-
-		@Nullable
-		private final HashSelector<T> keySelector;
-
-		@Nullable
-		private final TimestampAssigner<T> timestampAssigner;
-
-		OneInput(DataSet<T> dataSet, StreamConfig config, @Nullable TimestampAssigner<T> timestampAssigner) {
-			this.dataSet = dataSet;
-			this.config = config;
-			this.keySelector = null;
-			this.timestampAssigner = timestampAssigner;
-		}
-
-		<K> OneInput(
-			DataSet<T> dataSet,
-			StreamConfig config,
-			KeySelector<T, K> keySelector,
-			@Nullable TimestampAssigner<T> timestampAssigner) {
-			this.dataSet = dataSet;
-			this.config = config;
-			this.keySelector = new HashSelector<>(keySelector);
-			this.timestampAssigner = timestampAssigner;
-		}
-
-		@Override
-		DataSet<Tuple2<Integer, OperatorSubtaskState>> getOperatorSubtaskStates(
-			String uid,
-			StateBackend stateBackend,
-			MaxParallelismSupplier supplier,
-			Path savepointPath) {
-			DataSet<T> input = dataSet;
-			if (keySelector != null) {
-				input = dataSet.partitionCustom(new KeyGroupRangePartitioner(supplier), keySelector);
-			}
-
-			config.setOperatorName(uid);
-			config.setOperatorID(OperatorIDGenerator.fromUid(uid));
-			config.setStateBackend(stateBackend);
-
-			BoundedOneInputStreamTaskRunner<T> operatorRunner = new BoundedOneInputStreamTaskRunner<>(
-				config,
-				timestampAssigner,
-				supplier,
-				savepointPath);
-
-			return input.mapPartition(operatorRunner);
-		}
 	}
 }
 

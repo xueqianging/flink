@@ -27,7 +27,6 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
-import org.apache.flink.connectors.savepoint.api.Savepoint;
 import org.apache.flink.connectors.savepoint.functions.StateBootstapFunction;
 import org.apache.flink.connectors.savepoint.operators.StateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
@@ -46,8 +45,8 @@ import java.util.function.Function;
  *
  * @param <T> The type of the elements in this operator.
  */
-@PublicEvolving
 @SuppressWarnings("WeakerAccess")
+@PublicEvolving
 public class OneInputOperatorTransformation<T> {
 	private final DataSet<T> dataSet;
 
@@ -69,6 +68,12 @@ public class OneInputOperatorTransformation<T> {
 		return this;
 	}
 
+	/**
+	 * Assigns timestamps to the elements in the {@code OperatorTransformation}.
+	 *
+	 * @param timestampAssigner Returns the timestamp associated with each element.
+	 * @return The stream after the transformation, with assigned timestamps.
+	 */
 	public OneInputOperatorTransformation<T> assignTimestamps(Function<T, Long> timestampAssigner) {
 		this.timestampAssigner = (element, _unused) -> timestampAssigner.apply(element);
 		return this;
@@ -83,7 +88,7 @@ public class OneInputOperatorTransformation<T> {
 	 * @param processFunction The {@link StateBootstapFunction} that is called for each element.
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public OperatorTransformation process(StateBootstapFunction<T> processFunction) {
+	public BootstrapTransformation<T> transform(StateBootstapFunction<T> processFunction) {
 		StateBootstrapOperator<T> operator = new StateBootstrapOperator<>(processFunction);
 
 		return transform(operator);
@@ -98,11 +103,11 @@ public class OneInputOperatorTransformation<T> {
 	 * @param operator The object containing the transformation logic type of the return stream.
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public OperatorTransformation transform(OneInputStreamOperator<T, ?> operator) {
+	public BootstrapTransformation<T> transform(OneInputStreamOperator<T, ?> operator) {
 		StreamConfig config = new BoundedStreamConfig();
 		config.setStreamOperator(operator);
 
-		return new OperatorTransformation.OneInput<>(dataSet, config, timestampAssigner);
+		return new BootstrapTransformation<>(dataSet, config, timestampAssigner);
 	}
 
 	/**

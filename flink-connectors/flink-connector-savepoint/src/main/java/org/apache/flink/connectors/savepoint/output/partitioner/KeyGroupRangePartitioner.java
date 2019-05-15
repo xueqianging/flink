@@ -20,7 +20,7 @@ package org.apache.flink.connectors.savepoint.output.partitioner;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.Partitioner;
-import org.apache.flink.connectors.savepoint.apiv2.MaxParallelismSupplier;
+import org.apache.flink.connectors.savepoint.output.MaxParallelismSupplier;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 
 /**

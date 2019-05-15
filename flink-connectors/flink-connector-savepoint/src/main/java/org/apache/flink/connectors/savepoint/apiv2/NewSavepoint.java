@@ -18,16 +18,9 @@
 
 package org.apache.flink.connectors.savepoint.apiv2;
 
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
-import org.apache.flink.connectors.savepoint.output.OperatorStateReducer;
-import org.apache.flink.connectors.savepoint.output.OperatorSubtaskStateReducer;
-import org.apache.flink.connectors.savepoint.output.SavepointOutputFormat;
+import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.connectors.savepoint.output.MaxParallelismSupplier;
 import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.state.StateBackend;
 
 import java.util.HashMap;
@@ -36,121 +29,41 @@ import java.util.Map;
 /**
  * A new savepoint.
  */
-public class NewSavepoint implements Savepoint {
+@PublicEvolving
+public class NewSavepoint extends WritableSavepoint<NewSavepoint> {
 	private final StateBackend stateBackend;
 
 	private final int maxParallelism;
 
-	private final Map<String, OperatorTransformation> operatorsByUid;
+	private final Map<String, BootstrapTransformation> transformations;
 
 	NewSavepoint(StateBackend stateBackend, int maxParallelism) {
 		this.stateBackend = stateBackend;
 		this.maxParallelism = maxParallelism;
-		this.operatorsByUid = new HashMap<>();
+		this.transformations = new HashMap<>();
 	}
 
 	@Override
-	public <T> DataSet<T> readListState(String uid, String name, TypeInformation<T> typeInfo) {
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public <T> DataSet<T> readListState(
-		String uid,
-		String name,
-		TypeInformation<T> typeInfo,
-		TypeSerializer<T> serializer) {
-
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public <T> DataSet<T> readUnionState(String uid, String name, TypeInformation<T> typeInfo) {
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public <T> DataSet<T> readUnionState(
-		String uid,
-		String name,
-		TypeInformation<T> typeInfo,
-		TypeSerializer<T> serializer) {
-
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(
-		String uid,
-		String name,
-		TypeInformation<K> keyTypeInfo,
-		TypeInformation<V> valueTypeInfo) {
-
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public <K, V> DataSet<Tuple2<K, V>> readBroadcastState(
-		String uid,
-		String name,
-		TypeInformation<K> keyTypeInfo,
-		TypeInformation<V> valueTypeInfo,
-		TypeSerializer<K> keySerializer,
-		TypeSerializer<V> valueSerializer) {
-
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public <K, OUT> DataSet<OUT> readKeyedState(String uid, ProcessReaderFunction<K, OUT> function) {
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public <K, OUT> DataSet<OUT> readKeyedState(
-		String uid,
-		ProcessReaderFunction<K, OUT> function,
-		TypeInformation<K> keyTypeInfo,
-		TypeInformation<OUT> outTypeInfo) {
-
-		throw new IllegalStateException("State can only be read from an existing savepoint");
-	}
-
-	@Override
-	public Savepoint removeOperator(String uid) {
-		operatorsByUid.remove(uid);
+	public NewSavepoint removeOperator(String uid) {
+		transformations.remove(uid);
 		return this;
 	}
 
 	@Override
-	public Savepoint withOperator(String uid, OperatorTransformation operatorTransformation) {
-		if (operatorsByUid.containsKey(uid)) {
+	public <T> NewSavepoint withOperator(String uid, BootstrapTransformation<T> transformation) {
+		if (transformations.containsKey(uid)) {
 			throw new IllegalArgumentException("Duplicate uid " + uid + ". All uid's must be unique");
 		}
 
-		operatorsByUid.put(uid, operatorTransformation);
+		transformations.put(uid, transformation);
 		return this;
 	}
 
 	@Override
 	public void write(String path) {
 		Path savepointPath = new Path(path);
-
-		operatorsByUid
-			.entrySet()
-			.stream()
-			.map(entry -> getOperatorStates(entry.getKey(), entry.getValue(), savepointPath))
-			.reduce(DataSet::union)
-			.orElseThrow(() -> new IllegalStateException("Savepoint's must contain at least one operator"))
-			.reduceGroup(new OperatorStateReducer())
-			.output(new SavepointOutputFormat(savepointPath));
-	}
-
-	private DataSet<OperatorState> getOperatorStates(String uid, OperatorTransformation operator, Path savepointPath) {
 		MaxParallelismSupplier supplier = MaxParallelismSupplier.of(maxParallelism);
 
-		return operator
-			.getOperatorSubtaskStates(uid, stateBackend, supplier, savepointPath)
-			.reduceGroup(new OperatorSubtaskStateReducer(uid, supplier));
+		write(savepointPath, transformations, stateBackend, supplier, null);
 	}
 }

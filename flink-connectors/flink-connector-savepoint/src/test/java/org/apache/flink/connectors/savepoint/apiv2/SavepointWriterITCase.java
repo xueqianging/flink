@@ -31,7 +31,7 @@ import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.ProgramInvocationException;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
-import org.apache.flink.connectors.savepoint.functions.ProcessWriterFunction;
+import org.apache.flink.connectors.savepoint.functions.StateBootstapFunction;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
@@ -108,15 +108,15 @@ public class SavepointWriterITCase extends AbstractTestBase {
 
 		DataSet<Account> data = bEnv.fromCollection(accounts);
 
-		OperatorTransformation operator = OperatorTransformation
-			.fromDataSet(data)
-			.assignTimestamps((account, _unused) -> account.timestamp)
+		BootstrapTransformation<Account> transformation = OperatorTransformation
+			.bootstrapWith(data)
+			.assignTimestamps(account -> account.timestamp)
 			.keyBy(acc -> acc.id)
-			.process(new AccountBootstrapper());
+			.transform(new AccountBootstrapper());
 
 		Savepoint
 			.create(backend, 128)
-			.withOperator(uid, operator)
+			.withOperator(uid, transformation)
 			.write(savepointPath);
 
 		bEnv.execute("Bootstrap");
@@ -148,13 +148,13 @@ public class SavepointWriterITCase extends AbstractTestBase {
 
 		DataSet<Integer> data = bEnv.fromElements(1, 2, 3);
 
-		OperatorTransformation operator = OperatorTransformation
-			.fromDataSet(data)
-			.process(new ModifyProcessFunction());
+		BootstrapTransformation<Integer> transformation = OperatorTransformation
+			.bootstrapWith(data)
+			.transform(new ModifyProcessFunction());
 
 		Savepoint
 			.load(bEnv, savepointPath, backend)
-			.withOperator(modify, operator)
+			.withOperator(modify, transformation)
 			.write(modifyPath);
 
 		bEnv.execute("Modifying");
@@ -262,7 +262,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 	/**
 	 * A bootstrap function.
 	 */
-	public static class ModifyProcessFunction extends ProcessWriterFunction<Integer> {
+	public static class ModifyProcessFunction extends StateBootstapFunction<Integer> {
 		List<Integer> numbers;
 
 		ListState<Integer> state;

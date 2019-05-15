@@ -24,11 +24,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.runtime.state.CheckpointStorage;
-import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.filesystem.AbstractFsCheckpointStorage;
-import org.apache.flink.streaming.api.operators.OperatorSnapshotFinalizer;
-import org.apache.flink.streaming.api.operators.OperatorSnapshotFutures;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
@@ -66,27 +62,6 @@ abstract class BoundedStreamTask<IN, OUT, OP extends StreamOperator<OUT>> extend
 				AbstractFsCheckpointStorage.encodePathAsReference(savepointPath));
 	}
 
-	private void snapshot() throws Exception {
-		CheckpointStorage checkpointStorage = stateBackend.createCheckpointStorage(getEnvironment().getJobID());
-		headOperator.prepareSnapshotPreBarrier(0);
-
-		CheckpointStreamFactory storage = checkpointStorage.resolveCheckpointStorageLocation(
-			metaData.getCheckpointId(),
-			options.getTargetLocation());
-
-		headOperator.prepareSnapshotPreBarrier(0L);
-
-		OperatorSnapshotFutures snapshotInProgress = headOperator.snapshotState(
-				metaData.getCheckpointId(),
-				metaData.getTimestamp(),
-				options,
-				storage);
-
-		state = new OperatorSnapshotFinalizer(snapshotInProgress).getJobManagerOwnedState();
-
-		headOperator.notifyCheckpointComplete(0);
-	}
-
 	protected abstract void process(IN value) throws Exception;
 
 	OperatorSubtaskState getState() {
@@ -112,7 +87,7 @@ abstract class BoundedStreamTask<IN, OUT, OP extends StreamOperator<OUT>> extend
 			process(value);
 		}
 
-		snapshot();
+		state = FinalSnapshot.snapshot(getCheckpointStorage(), headOperator, metaData, options);
 	}
 
 	@Override
