@@ -31,7 +31,7 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateReaderFunction;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
@@ -327,7 +327,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 		}
 	}
 
-	private static class Reader extends ProcessReaderFunction<Integer, Integer> {
+	private static class Reader extends KeyedStateReaderFunction<Integer, Integer> {
 
 		private transient ValueState<Integer> state;
 
@@ -337,7 +337,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 		}
 
 		@Override
-		public void processKey(Integer key, Context ctx, Collector<Integer> out) throws Exception {
+		public void readKey(Integer key, Context ctx, Collector<Integer> out) throws Exception {
 			out.collect(state.value());
 		}
 	}

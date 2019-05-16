@@ -4,7 +4,7 @@ import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
-import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateReaderFunction;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.streaming.api.operators.InternalTimerService;
@@ -15,7 +15,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 @SuppressWarnings("unchecked")
-class ProcessReaderContext implements ProcessReaderFunction.Context {
+class ProcessReaderContext implements KeyedStateReaderFunction.Context {
 	private final ListState<Long> eventTimers;
 
 	private final ListState<Long> procTimers;

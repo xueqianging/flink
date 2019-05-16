@@ -24,7 +24,7 @@ import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateReaderFunction;
 import org.apache.flink.connectors.savepoint.input.splits.KeyGroupRangeInputSplit;
 import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
 import org.apache.flink.runtime.checkpoint.OperatorState;
@@ -91,7 +91,7 @@ public class KeyedStateInputFormatTest {
 
 		KeyGroupRangeInputSplit split = KeyedStateInputFormat.getKeyGroupRangeInputSplits(1, operatorState)[0];
 
-		ProcessReaderFunction<Integer, Integer> userFunction = new ReaderFunction();
+		KeyedStateReaderFunction<Integer, Integer> userFunction = new ReaderFunction();
 
 		List<Integer> data = readInputSplit(split, userFunction);
 
@@ -108,7 +108,7 @@ public class KeyedStateInputFormatTest {
 
 		KeyGroupRangeInputSplit split = KeyedStateInputFormat.getKeyGroupRangeInputSplits(1, operatorState)[0];
 
-		ProcessReaderFunction<Integer, Integer> userFunction = new TimeReaderFunction();
+		KeyedStateReaderFunction<Integer, Integer> userFunction = new TimeReaderFunction();
 
 		List<Integer> data = readInputSplit(split, userFunction);
 
@@ -125,7 +125,7 @@ public class KeyedStateInputFormatTest {
 
 		KeyGroupRangeInputSplit split = KeyedStateInputFormat.getKeyGroupRangeInputSplits(1, operatorState)[0];
 
-		ProcessReaderFunction<Integer, Integer> userFunction = new DoubleReaderFunction();
+		KeyedStateReaderFunction<Integer, Integer> userFunction = new DoubleReaderFunction();
 
 		List<Integer> data = readInputSplit(split, userFunction);
 
@@ -142,15 +142,15 @@ public class KeyedStateInputFormatTest {
 
 		KeyGroupRangeInputSplit split = KeyedStateInputFormat.getKeyGroupRangeInputSplits(1, operatorState)[0];
 
-		ProcessReaderFunction<Integer, Integer> userFunction = new InvalidReaderFunction();
+		KeyedStateReaderFunction<Integer, Integer> userFunction = new InvalidReaderFunction();
 
 		readInputSplit(split, userFunction);
 
-		Assert.fail("ProcessReaderFunction did not fail on invalid RuntimeContext use");
+		Assert.fail("KeyedStateReaderFunction did not fail on invalid RuntimeContext use");
 	}
 
 	@Nonnull
-	private List<Integer> readInputSplit(KeyGroupRangeInputSplit split, ProcessReaderFunction<Integer, Integer> userFunction) throws IOException {
+	private List<Integer> readInputSplit(KeyGroupRangeInputSplit split, KeyedStateReaderFunction<Integer, Integer> userFunction) throws IOException {
 		KeyedStateInputFormat<Integer, Integer> format = new KeyedStateInputFormat<>(
 			"",
 			"uid",
@@ -191,7 +191,7 @@ public class KeyedStateInputFormatTest {
 		}
 	}
 
-	static class ReaderFunction extends ProcessReaderFunction<Integer, Integer> {
+	static class ReaderFunction extends KeyedStateReaderFunction<Integer, Integer> {
 		ValueState<Integer> state;
 
 		@Override
@@ -200,12 +200,12 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
+		public void readKey(Integer key, KeyedStateReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			out.collect(state.value());
 		}
 	}
 
-	static class DoubleReaderFunction extends ProcessReaderFunction<Integer, Integer> {
+	static class DoubleReaderFunction extends KeyedStateReaderFunction<Integer, Integer> {
 		ValueState<Integer> state;
 
 		@Override
@@ -214,13 +214,13 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
+		public void readKey(Integer key, KeyedStateReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			out.collect(state.value());
 			out.collect(state.value());
 		}
 	}
 
-	static class InvalidReaderFunction extends ProcessReaderFunction<Integer, Integer> {
+	static class InvalidReaderFunction extends KeyedStateReaderFunction<Integer, Integer> {
 
 		@Override
 		public void open(Configuration parameters) {
@@ -228,7 +228,7 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
+		public void readKey(Integer key, KeyedStateReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			ValueState<Integer> state = getRuntimeContext().getState(stateDescriptor);
 			out.collect(state.value());
 		}
@@ -263,7 +263,7 @@ public class KeyedStateInputFormatTest {
 		}
 	}
 
-	static class TimeReaderFunction extends ProcessReaderFunction<Integer, Integer> {
+	static class TimeReaderFunction extends KeyedStateReaderFunction<Integer, Integer> {
 		ValueState<Integer> state;
 
 		@Override
@@ -272,7 +272,7 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void processKey(Integer key, ProcessReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
+		public void readKey(Integer key, KeyedStateReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
 			Set<Long> timers = ctx.getEventTimeTimers();
 			Assert.assertEquals("Each key should have exactly one timer for key " + key, 1, timers.size());
 			out.collect(timers.iterator().next().intValue());

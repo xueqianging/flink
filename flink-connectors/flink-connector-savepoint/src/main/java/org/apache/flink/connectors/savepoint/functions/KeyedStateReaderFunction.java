@@ -28,14 +28,14 @@ import java.util.Set;
 /**
  * A function that processes keys from a restored operator
  *
- * <p>For every key {@link #processKey(Object, Context, Collector)} is invoked. This can produce zero or more
+ * <p>For every key {@link #readKey(Object, Context, Collector)} is invoked. This can produce zero or more
  * elements as output.
  *
  * <p><b>NOTE:</b> State descriptors must be eagerly registered in {@code open(Configuration)}. Any
- * attempt to dynamically register states inside of {@code processKey} will result in a {@code
+ * attempt to dynamically register states inside of {@code readKey} will result in a {@code
  * RuntimeException}.
  *
- * <p><b>NOTE:</b> A {@code ProcessReaderFunction} is always a {@link
+ * <p><b>NOTE:</b> A {@code KeyedStateReaderFunction} is always a {@link
  * org.apache.flink.api.common.functions.RichFunction}. Therefore, access to the {@link
  * org.apache.flink.api.common.functions.RuntimeContext} is always available and setup and teardown
  * methods can be implemented. See {@link
@@ -46,14 +46,14 @@ import java.util.Set;
  * @param <OUT> Type of the output elements.
  */
 @PublicEvolving
-public abstract class ProcessReaderFunction<K, OUT> extends AbstractRichFunction {
+public abstract class KeyedStateReaderFunction<K, OUT> extends AbstractRichFunction {
 
 	/**
-	 * Initialization method for the function. It is called before {@link #processKey(Object,
+	 * Initialization method for the function. It is called before {@link #readKey(Object,
 	 * Context, Collector)} and thus suitable for one time setup work.
 	 *
 	 * <p>This is the only method that my register state descriptors within a {@code
-	 * ProcessReaderFunction}.
+	 * KeyedStateReaderFunction}.
 	 */
 	public abstract void open(Configuration parameters) throws Exception;
 
@@ -68,14 +68,14 @@ public abstract class ProcessReaderFunction<K, OUT> extends AbstractRichFunction
 	 * @throws Exception This method may throw exceptions. Throwing an exception will cause the
 	 *     operation to fail and may trigger recovery.
 	 */
-	public abstract void processKey(K key, Context ctx, Collector<OUT> out) throws Exception;
+	public abstract void readKey(K key, Context ctx, Collector<OUT> out) throws Exception;
 
 	/**
-	 * Context that {@link ProcessReaderFunction}'s can use for getting additional data about an input
+	 * Context that {@link KeyedStateReaderFunction}'s can use for getting additional data about an input
 	 * record.
 	 *
 	 * <p>The context is only valid for the duration of a {@link
-	 * ProcessReaderFunction#processKey(Object, Context, Collector)}  call. Do not store the context and use
+	 * KeyedStateReaderFunction#readKey(Object, Context, Collector)}  call. Do not store the context and use
 	 * afterwards!
 	 */
 	public interface Context {

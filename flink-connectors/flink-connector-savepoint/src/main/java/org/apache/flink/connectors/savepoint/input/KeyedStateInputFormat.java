@@ -25,7 +25,7 @@ import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateReaderFunction;
 import org.apache.flink.connectors.savepoint.input.splits.KeyGroupRangeInputSplit;
 import org.apache.flink.connectors.savepoint.runtime.NeverFireProcessingTimeService;
 import org.apache.flink.connectors.savepoint.runtime.SavepointEnvironment;
@@ -64,7 +64,7 @@ import java.util.List;
  * Input format for reading partitioned state.
  *
  * @param <K> The type of the key.
- * @param <OUT> The type of the output of the {@link ProcessReaderFunction}.
+ * @param <OUT> The type of the output of the {@link KeyedStateReaderFunction}.
  */
 @Internal
 public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, KeyGroupRangeInputSplit> implements KeyContext {
@@ -75,7 +75,7 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 	private final TypeInformation<K> keyType;
 
-	private final ProcessReaderFunction<K, OUT> userFunction;
+	private final KeyedStateReaderFunction<K, OUT> userFunction;
 
 	private transient TypeSerializer<K> keySerializer;
 
@@ -96,14 +96,14 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 	 * @param uid           The uid of an operator.
 	 * @param stateBackend  The state backed used to snapshot the operator.
 	 * @param keyType       The type information describing the key type.
-	 * @param userFunction  The {@link ProcessReaderFunction} called for each key in the operator.
+	 * @param userFunction  The {@link KeyedStateReaderFunction} called for each key in the operator.
 	 */
 	public KeyedStateInputFormat(
 		String savepointPath,
 		String uid,
 		StateBackend stateBackend,
 		TypeInformation<K> keyType,
-		ProcessReaderFunction<K, OUT> userFunction) {
+		KeyedStateReaderFunction<K, OUT> userFunction) {
 		super(savepointPath, uid);
 		this.stateBackend = stateBackend;
 		this.keyType = keyType;
@@ -243,9 +243,9 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		setCurrentKey(key);
 
 		try {
-			userFunction.processKey(key, ctx, out);
+			userFunction.readKey(key, ctx, out);
 		} catch (Exception e) {
-			throw new IOException("User defined function ProcessReaderFunction#processKey threw an exception", e);
+			throw new IOException("User defined function KeyedStateReaderFunction#readKey threw an exception", e);
 		}
 
 		keys.remove();

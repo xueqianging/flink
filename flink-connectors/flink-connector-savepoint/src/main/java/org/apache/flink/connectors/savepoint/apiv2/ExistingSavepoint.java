@@ -30,7 +30,7 @@ import org.apache.flink.api.java.Utils;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
-import org.apache.flink.connectors.savepoint.functions.ProcessReaderFunction;
+import org.apache.flink.connectors.savepoint.functions.KeyedStateReaderFunction;
 import org.apache.flink.connectors.savepoint.input.BroadcastStateInputFormat;
 import org.apache.flink.connectors.savepoint.input.KeyedStateInputFormat;
 import org.apache.flink.connectors.savepoint.input.ListStateInputFormat;
@@ -205,30 +205,30 @@ public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 	/**
 	 * Read keyed state from an operator in a {@code Savepoint}.
 	 * @param uid The uid of the operator.
-	 * @param function The {@link ProcessReaderFunction} that is called for each key in state.
+	 * @param function The {@link KeyedStateReaderFunction} that is called for each key in state.
 	 * @param <K> The type of the key in state.
 	 * @param <OUT> The output type of the transform function.
 	 * @return A {@code DataSet} of objects read from keyed state.
 	 */
-	public <K, OUT> DataSet<OUT> readKeyedState(String uid, ProcessReaderFunction<K, OUT> function) {
+	public <K, OUT> DataSet<OUT> readKeyedState(String uid, KeyedStateReaderFunction<K, OUT> function) {
 
 		TypeInformation<K> keyTypeInfo;
 		TypeInformation<OUT> outType;
 
 		try {
 			keyTypeInfo = TypeExtractor.createTypeInfo(
-				ProcessReaderFunction.class,
+				KeyedStateReaderFunction.class,
 				function.getClass(), 0, null, null);
 		} catch (InvalidTypesException e) {
 			throw new InvalidProgramException(
-				"The key type of the ProcessReaderFunction could not be automatically determined. Please use " +
-					"Savepoint#readKeyedState(String, ProcessReaderFunction, TypeInformation, TypeInformation) instead.", e);
+				"The key type of the KeyedStateReaderFunction could not be automatically determined. Please use " +
+					"Savepoint#readKeyedState(String, KeyedStateReaderFunction, TypeInformation, TypeInformation) instead.", e);
 		}
 
 		try {
 			outType = TypeExtractor.getUnaryOperatorReturnType(
 				function,
-				ProcessReaderFunction.class,
+				KeyedStateReaderFunction.class,
 				0,
 				1,
 				TypeExtractor.NO_INDEX,
@@ -237,8 +237,8 @@ public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 				false);
 		} catch (InvalidTypesException e) {
 			throw new InvalidProgramException(
-				"The output type of the ProcessReaderFunction could not be automatically determined. Please use " +
-				"Savepoint#readKeyedState(String, ProcessReaderFunction, TypeInformation, TypeInformation) instead.", e);
+				"The output type of the KeyedStateReaderFunction could not be automatically determined. Please use " +
+				"Savepoint#readKeyedState(String, KeyedStateReaderFunction, TypeInformation, TypeInformation) instead.", e);
 		}
 
 		return readKeyedState(uid, function, keyTypeInfo, outType);
@@ -247,7 +247,7 @@ public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 	/**
 	 * Read keyed state from an operator in a {@code Savepoint}.
 	 * @param uid The uid of the operator.
-	 * @param function The {@link ProcessReaderFunction} that is called for each key in state.
+	 * @param function The {@link KeyedStateReaderFunction} that is called for each key in state.
 	 * @param keyTypeInfo The type information of the key in state.
 	 * @param outTypeInfo The type information of the output of the transform reader function.
 	 * @param <K> The type of the key in state.
@@ -256,7 +256,7 @@ public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 	 */
 	public <K, OUT> DataSet<OUT> readKeyedState(
 		String uid,
-		ProcessReaderFunction<K, OUT> function,
+		KeyedStateReaderFunction<K, OUT> function,
 		TypeInformation<K> keyTypeInfo,
 		TypeInformation<OUT> outTypeInfo) {
 
