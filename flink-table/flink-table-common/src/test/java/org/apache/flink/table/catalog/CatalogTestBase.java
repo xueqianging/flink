@@ -21,6 +21,7 @@ package org.apache.flink.table.catalog;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.exceptions.CatalogException;
 import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotEmptyException;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotExistException;
@@ -56,10 +57,11 @@ public abstract class CatalogTestBase {
 
 	protected final String t1 = "t1";
 	protected final String t2 = "t2";
+	protected final String t3 = "t3";
 	protected final ObjectPath path1 = new ObjectPath(db1, t1);
 	protected final ObjectPath path2 = new ObjectPath(db2, t2);
 	protected final ObjectPath path3 = new ObjectPath(db1, t2);
-	protected final ObjectPath path4 = new ObjectPath(db1, "t3");
+	protected final ObjectPath path4 = new ObjectPath(db1, t3);
 	protected final ObjectPath nonExistDbPath = ObjectPath.fromString("non.exist");
 	protected final ObjectPath nonExistObjectPath = ObjectPath.fromString("db1.nonexist");
 
@@ -67,7 +69,7 @@ public abstract class CatalogTestBase {
 
 	protected static final String TEST_COMMENT = "test comment";
 
-	protected static ReadableWritableCatalog catalog;
+	protected static Catalog catalog;
 
 	@Rule
 	public ExpectedException exception = ExpectedException.none();
@@ -82,6 +84,9 @@ public abstract class CatalogTestBase {
 		}
 		if (catalog.tableExists(path3)) {
 			catalog.dropTable(path3, true);
+		}
+		if (catalog.tableExists(path4)) {
+			catalog.dropTable(path4, true);
 		}
 
 		if (catalog.databaseExists(db1)) {
@@ -101,27 +106,13 @@ public abstract class CatalogTestBase {
 
 	@Test
 	public void testCreateDb() throws Exception {
-		catalog.createDatabase(db2, createDb(), false);
+		assertFalse(catalog.databaseExists(db1));
 
-		assertEquals(2, catalog.listDatabases().size());
-	}
+		CatalogDatabase cd = createDb();
+		catalog.createDatabase(db1, cd, false);
 
-	@Test
-	public void testSetCurrentDatabase() throws Exception {
-		assertEquals(getBuiltInDefaultDatabase(), catalog.getCurrentDatabase());
-		catalog.createDatabase(db2, createDb(), true);
-		catalog.setCurrentDatabase(db2);
-		assertEquals(db2, catalog.getCurrentDatabase());
-		catalog.setCurrentDatabase(getBuiltInDefaultDatabase());
-		assertEquals(getBuiltInDefaultDatabase(), catalog.getCurrentDatabase());
-		catalog.dropDatabase(db2, false);
-	}
-
-	@Test
-	public void testSetCurrentDatabaseNegative() throws Exception {
-		exception.expect(DatabaseNotExistException.class);
-		exception.expectMessage("Database " + this.nonExistentDatabase + " does not exist in Catalog");
-		catalog.setCurrentDatabase(this.nonExistentDatabase);
+		assertTrue(catalog.databaseExists(db1));
+		CatalogTestUtil.checkEquals(cd, catalog.getDatabase(db1));
 	}
 
 	@Test
@@ -139,15 +130,15 @@ public abstract class CatalogTestBase {
 		catalog.createDatabase(db1, cd1, false);
 		List<String> dbs = catalog.listDatabases();
 
-		assertTrue(catalog.getDatabase(db1).getProperties().entrySet().containsAll(cd1.getProperties().entrySet()));
+		CatalogTestUtil.checkEquals(cd1, catalog.getDatabase(db1));
 		assertEquals(2, dbs.size());
-		assertEquals(new HashSet<>(Arrays.asList(db1, catalog.getCurrentDatabase())), new HashSet<>(dbs));
+		assertEquals(new HashSet<>(Arrays.asList(db1, catalog.getDefaultDatabase())), new HashSet<>(dbs));
 
 		catalog.createDatabase(db1, createAnotherDb(), true);
 
-		assertTrue(catalog.getDatabase(db1).getProperties().entrySet().containsAll(cd1.getProperties().entrySet()));
+		CatalogTestUtil.checkEquals(cd1, catalog.getDatabase(db1));
 		assertEquals(2, dbs.size());
-		assertEquals(new HashSet<>(Arrays.asList(db1, catalog.getCurrentDatabase())), new HashSet<>(dbs));
+		assertEquals(new HashSet<>(Arrays.asList(db1, catalog.getDefaultDatabase())), new HashSet<>(dbs));
 	}
 
 	@Test
@@ -161,11 +152,11 @@ public abstract class CatalogTestBase {
 	public void testDropDb() throws Exception {
 		catalog.createDatabase(db1, createDb(), false);
 
-		assertTrue(catalog.listDatabases().contains(db1));
+		assertTrue(catalog.databaseExists(db1));
 
 		catalog.dropDatabase(db1, false);
 
-		assertFalse(catalog.listDatabases().contains(db1));
+		assertFalse(catalog.databaseExists(db1));
 	}
 
 	@Test
@@ -195,13 +186,11 @@ public abstract class CatalogTestBase {
 		CatalogDatabase db = createDb();
 		catalog.createDatabase(db1, db, false);
 
-		assertTrue(catalog.getDatabase(db1).getProperties().entrySet().containsAll(db.getProperties().entrySet()));
-
 		CatalogDatabase newDb = createAnotherDb();
 		catalog.alterDatabase(db1, newDb, false);
 
 		assertFalse(catalog.getDatabase(db1).getProperties().entrySet().containsAll(db.getProperties().entrySet()));
-		assertTrue(catalog.getDatabase(db1).getProperties().entrySet().containsAll(newDb.getProperties().entrySet()));
+		CatalogTestUtil.checkEquals(newDb, catalog.getDatabase(db1));
 	}
 
 	@Test
@@ -235,7 +224,7 @@ public abstract class CatalogTestBase {
 		CatalogTable table = createStreamingTable();
 		catalog.createTable(path1, table, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 	}
 
 	@Test
@@ -248,7 +237,7 @@ public abstract class CatalogTestBase {
 
 		CatalogBaseTable tableCreated = catalog.getTable(path1);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) tableCreated);
+		checkEquals(table, (CatalogTable) tableCreated);
 		assertEquals(TEST_COMMENT, tableCreated.getDescription().get());
 
 		List<String> tables = catalog.listTables(db1);
@@ -262,7 +251,7 @@ public abstract class CatalogTestBase {
 		table = createPartitionedTable();
 		catalog.createTable(path1, table, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 
 		tables = catalog.listTables(db1);
 
@@ -296,11 +285,11 @@ public abstract class CatalogTestBase {
 		CatalogTable table = createTable();
 		catalog.createTable(path1, table, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 
 		catalog.createTable(path1, createAnotherTable(), true);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 	}
 
 	@Test
@@ -352,13 +341,13 @@ public abstract class CatalogTestBase {
 		CatalogTable table = createTable();
 		catalog.createTable(path1, table, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 
 		CatalogTable newTable = createAnotherTable();
 		catalog.alterTable(path1, newTable, false);
 
 		assertNotEquals(table, catalog.getTable(path1));
-		CatalogTestUtil.checkEquals(newTable, (CatalogTable) catalog.getTable(path1));
+		checkEquals(newTable, (CatalogTable) catalog.getTable(path1));
 
 		catalog.dropTable(path1, false);
 
@@ -366,12 +355,24 @@ public abstract class CatalogTestBase {
 		table = createPartitionedTable();
 		catalog.createTable(path1, table, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 
 		newTable = createAnotherPartitionedTable();
 		catalog.alterTable(path1, newTable, false);
 
-		CatalogTestUtil.checkEquals(newTable, (CatalogTable) catalog.getTable(path1));
+		checkEquals(newTable, (CatalogTable) catalog.getTable(path1));
+
+		// View
+		CatalogView view = createView();
+		catalog.createTable(path3, view, false);
+
+		checkEquals(view, (CatalogView) catalog.getTable(path3));
+
+		CatalogView newView = createAnotherView();
+		catalog.alterTable(path3, newView, false);
+
+		assertNotEquals(view, catalog.getTable(path3));
+		checkEquals(newView, (CatalogView) catalog.getTable(path3));
 	}
 
 	@Test
@@ -390,16 +391,36 @@ public abstract class CatalogTestBase {
 	}
 
 	@Test
+	public void testAlterTable_alterTableWithView() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+		catalog.createTable(path1, createTable(), false);
+
+		exception.expect(CatalogException.class);
+		exception.expectMessage("The existing table is a table, but the new catalog base table is not.");
+		catalog.alterTable(path1, createView(), false);
+	}
+
+	@Test
+	public void testAlterTable_alterViewWithTable() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+		catalog.createTable(path1, createView(), false);
+
+		exception.expect(CatalogException.class);
+		exception.expectMessage("The existing table is a view, but the new catalog base table is not.");
+		catalog.alterTable(path1, createTable(), false);
+	}
+
+	@Test
 	public void testRenameTable_nonPartitionedTable() throws Exception {
 		catalog.createDatabase(db1, createDb(), false);
 		CatalogTable table = createTable();
 		catalog.createTable(path1, table, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 
 		catalog.renameTable(path1, t2, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path3));
+		checkEquals(table, (CatalogTable) catalog.getTable(path3));
 		assertFalse(catalog.tableExists(path1));
 	}
 
@@ -431,6 +452,18 @@ public abstract class CatalogTestBase {
 	}
 
 	@Test
+	public void testListTables() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+
+		catalog.createTable(path1, createTable(), false);
+		catalog.createTable(path3, createTable(), false);
+		catalog.createTable(path4, createView(), false);
+
+		assertEquals(3, catalog.listTables(db1).size());
+		assertEquals(1, catalog.listViews(db1).size());
+	}
+
+	@Test
 	public void testTableExists() throws Exception {
 		catalog.createDatabase(db1, createDb(), false);
 
@@ -441,14 +474,128 @@ public abstract class CatalogTestBase {
 		assertTrue(catalog.tableExists(path1));
 	}
 
-	// ------ utilities ------
+	// ------ views ------
 
-	/**
-	 * Get the built-in default database of the specific catalog implementation.
-	 *
-	 * @return The built-in default database name
-	 */
-	public abstract String getBuiltInDefaultDatabase();
+	@Test
+	public void testCreateView() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+
+		assertFalse(catalog.tableExists(path1));
+
+		CatalogView view = createView();
+		catalog.createTable(path1, view, false);
+
+		assertTrue(catalog.getTable(path1) instanceof CatalogView);
+		checkEquals(view, (CatalogView) catalog.getTable(path1));
+	}
+
+	@Test
+	public void testCreateView_DatabaseNotExistException() throws Exception {
+		assertFalse(catalog.databaseExists(db1));
+
+		exception.expect(DatabaseNotExistException.class);
+		exception.expectMessage("Database db1 does not exist in Catalog");
+		catalog.createTable(nonExistObjectPath, createView(), false);
+	}
+
+	@Test
+	public void testCreateView_TableAlreadyExistException() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+		catalog.createTable(path1, createView(), false);
+
+		exception.expect(TableAlreadyExistException.class);
+		exception.expectMessage("Table (or view) db1.t1 already exists in Catalog");
+		catalog.createTable(path1, createView(), false);
+	}
+
+	@Test
+	public void testCreateView_TableAlreadyExist_ignored() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+
+		CatalogView view = createView();
+		catalog.createTable(path1, view, false);
+
+		assertTrue(catalog.getTable(path1) instanceof CatalogView);
+		checkEquals(view, (CatalogView) catalog.getTable(path1));
+
+		catalog.createTable(path1, createAnotherView(), true);
+
+		assertTrue(catalog.getTable(path1) instanceof CatalogView);
+		checkEquals(view, (CatalogView) catalog.getTable(path1));
+	}
+
+	@Test
+	public void testDropView() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+		catalog.createTable(path1, createView(), false);
+
+		assertTrue(catalog.tableExists(path1));
+
+		catalog.dropTable(path1, false);
+
+		assertFalse(catalog.tableExists(path1));
+	}
+
+	@Test
+	public void testAlterView() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+
+		CatalogView view = createView();
+		catalog.createTable(path1, view, false);
+
+		checkEquals(view, (CatalogView) catalog.getTable(path1));
+
+		CatalogView newView = createAnotherView();
+		catalog.alterTable(path1, newView, false);
+
+		assertTrue(catalog.getTable(path1) instanceof CatalogView);
+		checkEquals(newView, (CatalogView) catalog.getTable(path1));
+	}
+
+	@Test
+	public void testAlterView_TableNotExistException() throws Exception {
+		exception.expect(TableNotExistException.class);
+		exception.expectMessage("Table (or view) non.exist does not exist in Catalog");
+		catalog.alterTable(nonExistDbPath, createTable(), false);
+	}
+
+	@Test
+	public void testAlterView_TableNotExist_ignored() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+		catalog.alterTable(nonExistObjectPath, createView(), true);
+
+		assertFalse(catalog.tableExists(nonExistObjectPath));
+	}
+
+	@Test
+	public void testListView() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+
+		assertTrue(catalog.listTables(db1).isEmpty());
+
+		catalog.createTable(path1, createView(), false);
+		catalog.createTable(path3, createTable(), false);
+
+		assertEquals(2, catalog.listTables(db1).size());
+		assertEquals(new HashSet<>(Arrays.asList(path1.getObjectName(), path3.getObjectName())),
+			new HashSet<>(catalog.listTables(db1)));
+		assertEquals(Arrays.asList(path1.getObjectName()), catalog.listViews(db1));
+	}
+
+	@Test
+	public void testRenameView() throws Exception {
+		catalog.createDatabase(db1, createDb(), false);
+		catalog.createTable(path1, createView(), false);
+
+		assertTrue(catalog.tableExists(path1));
+
+		catalog.renameTable(path1, t2, false);
+
+		assertFalse(catalog.tableExists(path1));
+		assertTrue(catalog.tableExists(path3));
+	}
+
+	// ------ utilities ------
 
 	/**
 	 * Create a CatalogDatabase instance by specific catalog implementation.
@@ -499,6 +646,20 @@ public abstract class CatalogTestBase {
 	 */
 	public abstract CatalogTable createAnotherPartitionedTable();
 
+	/**
+	 * Create a CatalogView instance by specific catalog implementation.
+	 *
+	 * @return a CatalogView instance
+	 */
+	public abstract CatalogView createView();
+
+	/**
+	 * Create another CatalogView instance by specific catalog implementation.
+	 *
+	 * @return another CatalogView instance
+	 */
+	public abstract CatalogView createAnotherView();
+
 	protected TableSchema createTableSchema() {
 		return new TableSchema(
 			new String[] {"first", "second", "third"},
@@ -535,5 +696,24 @@ public abstract class CatalogTestBase {
 		return new HashMap<String, String>() {{
 			put(IS_STREAMING, "true");
 		}};
+	}
+
+	// ------ equality check utils ------
+	// Can be overriden by sub test class
+
+	protected void checkEquals(CatalogTable t1, CatalogTable t2) {
+		assertEquals(t1.getSchema(), t2.getSchema());
+		assertEquals(t1.getProperties(), t2.getProperties());
+		assertEquals(t1.getComment(), t2.getComment());
+		assertEquals(t1.getPartitionKeys(), t2.getPartitionKeys());
+		assertEquals(t1.isPartitioned(), t2.isPartitioned());
+	}
+
+	protected void checkEquals(CatalogView v1, CatalogView v2) {
+		assertEquals(v1.getSchema(), v1.getSchema());
+		assertEquals(v1.getProperties(), v2.getProperties());
+		assertEquals(v1.getComment(), v2.getComment());
+		assertEquals(v1.getOriginalQuery(), v2.getOriginalQuery());
+		assertEquals(v1.getExpandedQuery(), v2.getExpandedQuery());
 	}
 }

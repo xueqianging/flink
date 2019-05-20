@@ -23,6 +23,7 @@ import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.runtime.kryo.KryoSerializer;
+import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.types.logical.AnyType;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
@@ -45,6 +46,7 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.SmallIntType;
 import org.apache.flink.table.types.logical.StructuredType;
 import org.apache.flink.table.types.logical.TimeType;
+import org.apache.flink.table.types.logical.TimestampKind;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
 import org.apache.flink.table.types.logical.TypeInformationAnyType;
@@ -68,6 +70,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * Test for subclasses of {@link org.apache.flink.table.types.logical.LogicalType}.
@@ -93,6 +96,19 @@ public class LogicalTypesTest {
 			new VarCharType(33),
 			"VARCHAR(33)",
 			"VARCHAR(33)",
+			new Class[]{String.class, byte[].class},
+			new Class[]{String.class, byte[].class},
+			new LogicalType[]{},
+			new VarCharType(12)
+		);
+	}
+
+	@Test
+	public void testVarCharTypeWithMaximumLength() {
+		testAll(
+			new VarCharType(Integer.MAX_VALUE),
+			"VARCHAR(2147483647)",
+			"STRING",
 			new Class[]{String.class, byte[].class},
 			new Class[]{String.class, byte[].class},
 			new LogicalType[]{},
@@ -136,6 +152,19 @@ public class LogicalTypesTest {
 			new Class[]{byte[].class},
 			new LogicalType[]{},
 			new VarBinaryType()
+		);
+	}
+
+	@Test
+	public void testVarBinaryTypeWithMaximumLength() {
+		testAll(
+			new VarBinaryType(Integer.MAX_VALUE),
+			"VARBINARY(2147483647)",
+			"BYTES",
+			new Class[]{byte[].class},
+			new Class[]{byte[].class},
+			new LogicalType[]{},
+			new VarBinaryType(12)
 		);
 	}
 
@@ -270,6 +299,19 @@ public class LogicalTypesTest {
 	}
 
 	@Test
+	public void testTimestampTypeWithTimeAttribute() {
+		testAll(
+			new TimestampType(true, TimestampKind.ROWTIME, 9),
+			"TIMESTAMP(9)",
+			"TIMESTAMP(9) *ROWTIME*",
+			new Class[]{java.sql.Timestamp.class, java.time.LocalDateTime.class},
+			new Class[]{java.time.LocalDateTime.class},
+			new LogicalType[]{},
+			new TimestampType(3)
+		);
+	}
+
+	@Test
 	public void testZonedTimestampType() {
 		testAll(
 			new ZonedTimestampType(9),
@@ -283,11 +325,37 @@ public class LogicalTypesTest {
 	}
 
 	@Test
+	public void testZonedTimestampTypeWithTimeAttribute() {
+		testAll(
+			new ZonedTimestampType(true, TimestampKind.PROCTIME, 9),
+			"TIMESTAMP(9) WITH TIME ZONE",
+			"TIMESTAMP(9) WITH TIME ZONE *PROCTIME*",
+			new Class[]{java.time.ZonedDateTime.class, java.time.OffsetDateTime.class},
+			new Class[]{java.time.OffsetDateTime.class},
+			new LogicalType[]{},
+			new ZonedTimestampType(3)
+		);
+	}
+
+	@Test
 	public void testLocalZonedTimestampType() {
 		testAll(
 			new LocalZonedTimestampType(9),
 			"TIMESTAMP(9) WITH LOCAL TIME ZONE",
 			"TIMESTAMP(9) WITH LOCAL TIME ZONE",
+			new Class[]{java.time.Instant.class, long.class, int.class},
+			new Class[]{java.time.Instant.class},
+			new LogicalType[]{},
+			new LocalZonedTimestampType(3)
+		);
+	}
+
+	@Test
+	public void testLocalZonedTimestampTypeWithTimeAttribute() {
+		testAll(
+			new LocalZonedTimestampType(true, TimestampKind.ROWTIME, 9),
+			"TIMESTAMP(9) WITH LOCAL TIME ZONE",
+			"TIMESTAMP(9) WITH LOCAL TIME ZONE *ROWTIME*",
 			new Class[]{java.time.Instant.class, long.class, int.class},
 			new Class[]{java.time.Instant.class},
 			new LogicalType[]{},
@@ -401,6 +469,25 @@ public class LogicalTypesTest {
 					new RowType.RowField("a", new VarCharType(), "Different desc."),
 					new RowType.RowField("b`", new TimestampType())))
 		);
+
+		try {
+			new RowType(
+				Arrays.asList(
+					new RowType.RowField("b", new VarCharType()),
+					new RowType.RowField("b", new VarCharType()),
+					new RowType.RowField("a", new VarCharType()),
+					new RowType.RowField("a", new TimestampType())));
+			fail("Not unique fields expected.");
+		} catch (ValidationException e) {
+			// ok
+		}
+
+		try {
+			new RowType(Collections.singletonList(new RowType.RowField("", new VarCharType())));
+			fail("Invalid name.");
+		} catch (ValidationException e) {
+			// ok
+		}
 	}
 
 	@Test
@@ -602,7 +689,7 @@ public class LogicalTypesTest {
 		return new StructuredType.Builder(
 				new UserDefinedType.TypeIdentifier("cat", "db", "Human"),
 				Collections.singletonList(
-					new StructuredType.StructuredAttribute("name", UDT_NAME_TYPE)))
+					new StructuredType.StructuredAttribute("name", UDT_NAME_TYPE, "Description.")))
 			.setDescription("Human type desc.")
 			.setFinal(false)
 			.setInstantiable(false)

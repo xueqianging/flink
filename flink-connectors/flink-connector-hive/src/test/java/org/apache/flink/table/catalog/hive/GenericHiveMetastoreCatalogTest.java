@@ -26,10 +26,10 @@ import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.catalog.CatalogDatabase;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTestBase;
-import org.apache.flink.table.catalog.CatalogTestUtil;
+import org.apache.flink.table.catalog.CatalogView;
 import org.apache.flink.table.catalog.GenericCatalogDatabase;
 import org.apache.flink.table.catalog.GenericCatalogTable;
-import org.apache.flink.table.plan.stats.TableStats;
+import org.apache.flink.table.catalog.GenericCatalogView;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -80,7 +80,6 @@ public class GenericHiveMetastoreCatalogTest extends CatalogTestBase {
 
 		CatalogTable table = new GenericCatalogTable(
 			new TableSchema(colNames, types),
-			new TableStats(0),
 			getBatchTableProperties(),
 			TEST_COMMENT
 		);
@@ -88,14 +87,7 @@ public class GenericHiveMetastoreCatalogTest extends CatalogTestBase {
 		catalog.createDatabase(db1, createDb(), false);
 		catalog.createTable(path1, table, false);
 
-		CatalogTestUtil.checkEquals(table, (CatalogTable) catalog.getTable(path1));
-	}
-
-	// ------ utils ------
-
-	@Override
-	public String getBuiltInDefaultDatabase() {
-		return GenericHiveMetastoreCatalog.DEFAULT_DB;
+		checkEquals(table, (CatalogTable) catalog.getTable(path1));
 	}
 
 	@Override
@@ -120,7 +112,6 @@ public class GenericHiveMetastoreCatalogTest extends CatalogTestBase {
 	public CatalogTable createTable() {
 		return new GenericCatalogTable(
 			createTableSchema(),
-			new TableStats(0),
 			getBatchTableProperties(),
 			TEST_COMMENT);
 	}
@@ -129,7 +120,6 @@ public class GenericHiveMetastoreCatalogTest extends CatalogTestBase {
 	public CatalogTable createAnotherTable() {
 		return new GenericCatalogTable(
 			createAnotherTableSchema(),
-			new TableStats(0),
 			getBatchTableProperties(),
 			TEST_COMMENT);
 	}
@@ -138,7 +128,6 @@ public class GenericHiveMetastoreCatalogTest extends CatalogTestBase {
 	public CatalogTable createStreamingTable() {
 		return new GenericCatalogTable(
 			createTableSchema(),
-			new TableStats(0),
 			getStreamingTableProperties(),
 			TEST_COMMENT);
 	}
@@ -147,7 +136,6 @@ public class GenericHiveMetastoreCatalogTest extends CatalogTestBase {
 	public CatalogTable createPartitionedTable() {
 		return new GenericCatalogTable(
 			createTableSchema(),
-			new TableStats(0),
 			createPartitionKeys(),
 			getBatchTableProperties(),
 			TEST_COMMENT);
@@ -157,9 +145,28 @@ public class GenericHiveMetastoreCatalogTest extends CatalogTestBase {
 	public CatalogTable createAnotherPartitionedTable() {
 		return new GenericCatalogTable(
 			createAnotherTableSchema(),
-			new TableStats(0),
 			createPartitionKeys(),
 			getBatchTableProperties(),
 			TEST_COMMENT);
+	}
+
+	@Override
+	public CatalogView createView() {
+		return new GenericCatalogView(
+			String.format("select * from %s", t1),
+			String.format("select * from %s.%s", TEST_CATALOG_NAME, path1.getFullName()),
+			createTableSchema(),
+			new HashMap<>(),
+			"This is a view");
+	}
+
+	@Override
+	public CatalogView createAnotherView() {
+		return new GenericCatalogView(
+			String.format("select * from %s", t2),
+			String.format("select * from %s.%s", TEST_CATALOG_NAME, path2.getFullName()),
+			createAnotherTableSchema(),
+			new HashMap<>(),
+			"This is another view");
 	}
 }
