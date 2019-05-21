@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.apiv2;
+package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.InvalidProgramException;
@@ -36,8 +36,8 @@ import org.apache.flink.connectors.savepoint.input.KeyedStateInputFormat;
 import org.apache.flink.connectors.savepoint.input.ListStateInputFormat;
 import org.apache.flink.connectors.savepoint.input.OperatorInputFormat;
 import org.apache.flink.connectors.savepoint.input.UnionStateInputFormat;
-import org.apache.flink.connectors.savepoint.output.MaxParallelismSupplier;
-import org.apache.flink.connectors.savepoint.output.OnDiskMaxParallelismSupplier;
+import org.apache.flink.connectors.savepoint.output.metadata.OnDiskSavepointMetadataProvider;
+import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.jobgraph.OperatorID;
@@ -291,11 +291,11 @@ public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 	public void write(String path) {
 		Path savepointPath = new Path(path);
 
-		MaxParallelismSupplier supplier = new OnDiskMaxParallelismSupplier(path);
+		SavepointMetadataProvider provider = new OnDiskSavepointMetadataProvider(path);
 
 		DataSet<OperatorState> existingOperators = env.createInput(
 			new OperatorInputFormat(existingSavepoint, droppedOperators));
 
-		write(savepointPath, transformations, stateBackend, supplier, existingOperators);
+		write(savepointPath, transformations, stateBackend, provider, existingOperators);
 	}
 }

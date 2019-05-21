@@ -20,7 +20,7 @@ package org.apache.flink.connectors.savepoint.output.partitioner;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.Partitioner;
-import org.apache.flink.connectors.savepoint.output.MaxParallelismSupplier;
+import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 
 /**
@@ -30,16 +30,16 @@ import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 public class KeyGroupRangePartitioner implements Partitioner<Integer> {
 	private int maxParallelism = -1;
 
-	private MaxParallelismSupplier supplier;
+	private SavepointMetadataProvider provider;
 
-	public KeyGroupRangePartitioner(MaxParallelismSupplier supplier) {
-		this.supplier = supplier;
+	public KeyGroupRangePartitioner(SavepointMetadataProvider provider) {
+		this.provider = provider;
 	}
 
 	@Override
 	public int partition(Integer key, int numPartitions) {
-		if (maxParallelism == -1 && supplier != null) {
-			maxParallelism = supplier.get();
+		if (maxParallelism == -1 && provider != null) {
+			maxParallelism = provider.maxParallelism();
 		}
 
 		return KeyGroupRangeAssignment.computeOperatorIndexForKeyGroup(

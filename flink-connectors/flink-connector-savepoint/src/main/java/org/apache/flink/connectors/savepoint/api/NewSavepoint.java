@@ -16,10 +16,11 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.apiv2;
+package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.annotation.PublicEvolving;
-import org.apache.flink.connectors.savepoint.output.MaxParallelismSupplier;
+import org.apache.flink.connectors.savepoint.output.metadata.ConfiguredSavepointMetadataProvider;
+import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.StateBackend;
 
@@ -62,8 +63,8 @@ public class NewSavepoint extends WritableSavepoint<NewSavepoint> {
 	@Override
 	public void write(String path) {
 		Path savepointPath = new Path(path);
-		MaxParallelismSupplier supplier = MaxParallelismSupplier.of(maxParallelism);
+		SavepointMetadataProvider provider = new ConfiguredSavepointMetadataProvider(maxParallelism);
 
-		write(savepointPath, transformations, stateBackend, supplier, null);
+		write(savepointPath, transformations, stateBackend, provider, null);
 	}
 }

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.apiv2;
+package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.operators.Keys;

@@ -20,14 +20,12 @@ package org.apache.flink.connectors.savepoint.output;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
-import org.apache.flink.runtime.checkpoint.MasterState;
+import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.checkpoint.savepoint.Savepoint;
 import org.apache.flink.runtime.checkpoint.savepoint.SavepointV2;
 import org.apache.flink.util.Collector;
 
-import java.util.Collection;
-import java.util.Collections;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -36,14 +34,10 @@ import java.util.stream.StreamSupport;
  */
 @Internal
 public class OperatorStateReducer implements GroupReduceFunction<OperatorState, Savepoint> {
-	private final Collection<MasterState> masterStates;
+	private final SavepointMetadataProvider provider;
 
-	public OperatorStateReducer() {
-		masterStates = Collections.emptyList();
-	}
-
-	public OperatorStateReducer(Collection<MasterState> masterStates) {
-		this.masterStates = masterStates;
+	public OperatorStateReducer(SavepointMetadataProvider provider) {
+		this.provider = provider;
 	}
 
 	@Override
@@ -52,7 +46,7 @@ public class OperatorStateReducer implements GroupReduceFunction<OperatorState, 
 			new SavepointV2(
 				0,
 				StreamSupport.stream(values.spliterator(), false).collect(Collectors.toList()),
-				masterStates);
+				provider.getMasterStates());
 
 		out.collect(savepoint);
 	}

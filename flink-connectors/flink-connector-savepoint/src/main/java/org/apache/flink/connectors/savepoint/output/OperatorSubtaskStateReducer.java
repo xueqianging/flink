@@ -22,13 +22,13 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.RichGroupReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.util.Collector;
 
 import java.util.List;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -42,20 +42,20 @@ public class OperatorSubtaskStateReducer
 
 	private final String uid;
 
-	private final Supplier<Integer> maxParallelismSupplier;
+	private final SavepointMetadataProvider provider;
 
 	private int maxParallelism;
 
-	public OperatorSubtaskStateReducer(String uid, Supplier<Integer> maxParallelismSupplier) {
+	public OperatorSubtaskStateReducer(String uid, SavepointMetadataProvider provider) {
 		this.uid = uid;
-		this.maxParallelismSupplier = maxParallelismSupplier;
+		this.provider = provider;
 	}
 
 	@Override
 	public void open(Configuration parameters) throws Exception {
 		super.open(parameters);
 
-		maxParallelism = maxParallelismSupplier.get();
+		maxParallelism = provider.maxParallelism();
 	}
 
 	@Override

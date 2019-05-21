@@ -16,14 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.apiv2;
+package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.connectors.savepoint.output.BoundedOneInputStreamTaskRunner;
-import org.apache.flink.connectors.savepoint.output.MaxParallelismSupplier;
+import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.connectors.savepoint.output.partitioner.HashSelector;
 import org.apache.flink.connectors.savepoint.output.partitioner.KeyGroupRangePartitioner;
 import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
@@ -76,11 +76,11 @@ public class BootstrapTransformation<T> {
 	DataSet<Tuple2<Integer, OperatorSubtaskState>> getOperatorSubtaskStates(
 		String uid,
 		StateBackend stateBackend,
-		MaxParallelismSupplier supplier,
+		SavepointMetadataProvider provider,
 		Path savepointPath) {
 		DataSet<T> input = dataSet;
 		if (keySelector != null) {
-			input = dataSet.partitionCustom(new KeyGroupRangePartitioner(supplier), keySelector);
+			input = dataSet.partitionCustom(new KeyGroupRangePartitioner(provider), keySelector);
 		}
 
 		config.setOperatorName(uid);
@@ -90,7 +90,7 @@ public class BootstrapTransformation<T> {
 		BoundedOneInputStreamTaskRunner<T> operatorRunner = new BoundedOneInputStreamTaskRunner<>(
 			config,
 			timestampAssigner,
-			supplier,
+			provider,
 			savepointPath);
 
 		return input.mapPartition(operatorRunner);

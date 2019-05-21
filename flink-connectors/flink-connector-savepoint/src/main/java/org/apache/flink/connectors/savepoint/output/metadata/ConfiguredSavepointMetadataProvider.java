@@ -16,27 +16,33 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.apiv2;
+package org.apache.flink.connectors.savepoint.output.metadata;
 
-import org.apache.flink.annotation.PublicEvolving;
-import org.apache.flink.api.java.DataSet;
+import org.apache.flink.annotation.Internal;
+import org.apache.flink.runtime.checkpoint.MasterState;
+
+import java.util.Collection;
+import java.util.Collections;
 
 /**
- * An OperatorTransformation represents a single operator within a {@link Savepoint}.
+ * Supplies savepoint metadata based on user provided configuration.
  */
-@SuppressWarnings("WeakerAccess")
-@PublicEvolving
-public abstract class OperatorTransformation {
+@Internal
+public class ConfiguredSavepointMetadataProvider implements SavepointMetadataProvider {
 
-	/**
-	 * Create a new {@link OperatorTransformation} from a {@link DataSet}.
-	 *
-	 * @param dataSet A dataset of elements.
-	 * @param <T> The type of the input.
-	 * @return A {@link OneInputOperatorTransformation}.
-	 */
-	public static <T> OneInputOperatorTransformation<T> bootstrapWith(DataSet<T> dataSet) {
-		return new OneInputOperatorTransformation<>(dataSet);
+	private final int maxParallelism;
+
+	public ConfiguredSavepointMetadataProvider(int maxParallelism) {
+		this.maxParallelism = maxParallelism;
+	}
+
+	@Override
+	public int maxParallelism() {
+		return maxParallelism;
+	}
+
+	@Override
+	public Collection<MasterState> getMasterStates() {
+		return Collections.emptyList();
 	}
 }
-

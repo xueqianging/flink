@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.savepoint.apiv2;
+package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.java.DataSet;
-import org.apache.flink.connectors.savepoint.output.MaxParallelismSupplier;
 import org.apache.flink.connectors.savepoint.output.OperatorStateReducer;
 import org.apache.flink.connectors.savepoint.output.OperatorSubtaskStateReducer;
 import org.apache.flink.connectors.savepoint.output.SavepointOutputFormat;
+import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.state.StateBackend;
@@ -64,13 +64,13 @@ public abstract class WritableSavepoint<F extends WritableSavepoint> {
 		Path savepointPath,
 		Map<String, BootstrapTransformation> transformations,
 		StateBackend stateBackend,
-		MaxParallelismSupplier supplier,
+		SavepointMetadataProvider provider,
 		@Nullable DataSet<OperatorState> existingOperators) {
 
 		DataSet<OperatorState> newOperatorStates = transformations
 			.entrySet()
 			.stream()
-			.map(entry -> getOperatorStates(savepointPath, entry.getKey(), stateBackend, entry.getValue(), supplier))
+			.map(entry -> getOperatorStates(savepointPath, entry.getKey(), stateBackend, entry.getValue(), provider))
 			.reduce(DataSet::union)
 			.orElseThrow(() -> new IllegalStateException("Savepoint's must contain at least one operator"));
 
@@ -83,7 +83,7 @@ public abstract class WritableSavepoint<F extends WritableSavepoint> {
 
 		finalOperatorStates
 			.union(existingOperators)
-			.reduceGroup(new OperatorStateReducer())
+			.reduceGroup(new OperatorStateReducer(provider))
 			.output(new SavepointOutputFormat(savepointPath));
 	}
 
@@ -93,11 +93,11 @@ public abstract class WritableSavepoint<F extends WritableSavepoint> {
 		String uid,
 		StateBackend stateBackend,
 		BootstrapTransformation operator,
-		MaxParallelismSupplier supplier
+		SavepointMetadataProvider provider
 		) {
 
 		return operator
-			.getOperatorSubtaskStates(uid, stateBackend, supplier, savepointPath)
-			.reduceGroup(new OperatorSubtaskStateReducer(uid, supplier));
+			.getOperatorSubtaskStates(uid, stateBackend, provider, savepointPath)
+			.reduceGroup(new OperatorSubtaskStateReducer(uid, provider));
 	}
 }
