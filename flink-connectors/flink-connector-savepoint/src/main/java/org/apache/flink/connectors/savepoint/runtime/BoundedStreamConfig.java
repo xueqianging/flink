@@ -38,19 +38,11 @@ public class BoundedStreamConfig extends StreamConfig {
 		setCheckpointMode(CheckpointingMode.EXACTLY_ONCE);
 	}
 
-	public <K, IN> BoundedStreamConfig(TypeSerializer<K> keySerializer, KeySelector<IN, K> keySelector) {
+	public <IN> BoundedStreamConfig(TypeSerializer<?> keySerializer, KeySelector<IN, ?> keySelector) {
 		this();
 
 		setStateKeySerializer(keySerializer);
 		setStatePartitioner(0, keySelector);
-	}
-
-	public <K, IN1, IN2> BoundedStreamConfig(TypeSerializer<K> keySerializer, KeySelector<IN1, K> keySelector1, KeySelector<IN2, K> keySelector2) {
-		this();
-
-		setStateKeySerializer(keySerializer);
-		setStatePartitioner(0, keySelector1);
-		setStatePartitioner(1, keySelector2);
 	}
 }
 

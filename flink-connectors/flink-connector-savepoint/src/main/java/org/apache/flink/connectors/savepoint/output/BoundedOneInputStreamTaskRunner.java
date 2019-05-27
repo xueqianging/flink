@@ -20,18 +20,16 @@ package org.apache.flink.connectors.savepoint.output;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.connectors.savepoint.runtime.SavepointEnvironment;
-import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.util.Collector;
 
 /**
  * A {@link RichMapPartitionFunction} that serves as the runtime for a {@link
- * BoundedOneInputStreamTask}.
+ * BoundedStreamTask}.
  *
  * <p>The task is executed processing the data in a particular partition instead of the pulling from
  * the network stack. After all data has been processed the runner will output the {@link
@@ -40,12 +38,10 @@ import org.apache.flink.util.Collector;
  * @param <IN> Type of the input to the partition
  */
 @Internal
-public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunction<IN, Tuple2<Integer, OperatorSubtaskState>> {
+public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunction<IN, TaggedOperatorSubtaskState> {
 	private final StreamConfig streamConfig;
 
 	private final SavepointMetadataProvider provider;
-
-	private final Path savepointPath;
 
 	private transient SavepointEnvironment env;
 
@@ -55,16 +51,13 @@ public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunctio
 	 * @param streamConfig The internal configuration for the task.
 	 * @param provider Provides the max parallelism of the operator. Equivalent to setting {@link
 	 *     org.apache.flink.streaming.api.environment.StreamExecutionEnvironment#setMaxParallelism(int)}.
-	 * @param savepointPath The directory where the savepoint should be written.
 	 */
 	public BoundedOneInputStreamTaskRunner(
 		StreamConfig streamConfig,
-		SavepointMetadataProvider provider,
-		Path savepointPath) {
+		SavepointMetadataProvider provider) {
 
 		this.streamConfig = streamConfig;
 		this.provider = provider;
-		this.savepointPath = savepointPath;
 	}
 
 	@Override
@@ -72,7 +65,7 @@ public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunctio
 		super.open(parameters);
 		int maxParallelism = provider.maxParallelism();
 
-		 env = new SavepointEnvironment
+		env = new SavepointEnvironment
 			.Builder(getRuntimeContext(), maxParallelism)
 			.setConfiguration(streamConfig.getConfiguration())
 			.build();
@@ -80,18 +73,8 @@ public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunctio
 	}
 
 	@Override
-	public void mapPartition(Iterable<IN> values, Collector<Tuple2<Integer, OperatorSubtaskState>> out) throws Exception {
-		BoundedOneInputStreamTask<IN, ?> task = new BoundedOneInputStreamTask<>(
-			env,
-			savepointPath,
-			values);
-
-		task.invoke();
-
-		int index = getRuntimeContext().getIndexOfThisSubtask();
-		OperatorSubtaskState subtaskState = task.getState();
-
-		out.collect(Tuple2.of(index, subtaskState));
+	public void mapPartition(Iterable<IN> values, Collector<TaggedOperatorSubtaskState> out) throws Exception {
+		new BoundedStreamTask<>(env, values, out).invoke();
 	}
 }
 

@@ -20,7 +20,6 @@ package org.apache.flink.connectors.savepoint.output;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.functions.RichGroupReduceFunction;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
@@ -38,7 +37,7 @@ import java.util.stream.StreamSupport;
  */
 @Internal
 public class OperatorSubtaskStateReducer
-	extends RichGroupReduceFunction<Tuple2<Integer, OperatorSubtaskState>, OperatorState> {
+	extends RichGroupReduceFunction<TaggedOperatorSubtaskState, OperatorState> {
 
 	private final String uid;
 
@@ -59,15 +58,15 @@ public class OperatorSubtaskStateReducer
 	}
 
 	@Override
-	public void reduce(Iterable<Tuple2<Integer, OperatorSubtaskState>> values, Collector<OperatorState> out) {
-		List<Tuple2<Integer, OperatorSubtaskState>> subtasks = StreamSupport
+	public void reduce(Iterable<TaggedOperatorSubtaskState> values, Collector<OperatorState> out) {
+		List<TaggedOperatorSubtaskState> subtasks = StreamSupport
 			.stream(values.spliterator(), false)
 			.collect(Collectors.toList());
 
 		OperatorState operatorState = new OperatorState(OperatorIDGenerator.fromUid(uid), subtasks.size(), maxParallelism);
 
-		for (Tuple2<Integer, OperatorSubtaskState> value : subtasks) {
-			operatorState.putState(value.f0, value.f1);
+		for (TaggedOperatorSubtaskState value : subtasks) {
+			operatorState.putState(value.index, value.state);
 		}
 
 		out.collect(operatorState);

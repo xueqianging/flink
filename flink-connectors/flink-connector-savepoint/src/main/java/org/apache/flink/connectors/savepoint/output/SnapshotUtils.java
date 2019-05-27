@@ -1,10 +1,13 @@
 package org.apache.flink.connectors.savepoint.output;
 
-import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
+import org.apache.flink.annotation.Internal;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.state.CheckpointStorageWorkerView;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
+import org.apache.flink.runtime.state.filesystem.AbstractFsCheckpointStorage;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotFinalizer;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotFutures;
 import org.apache.flink.streaming.api.operators.StreamOperator;
@@ -12,30 +15,38 @@ import org.apache.flink.streaming.api.operators.StreamOperator;
 /**
  * Takes a final snapshot of the state of an operator subtask.
  */
-final class FinalSnapshot {
-	static <OUT, OP extends StreamOperator<OUT>> OperatorSubtaskState snapshot(
-		CheckpointStorageWorkerView checkpointStorage,
-		OP operator,
-		CheckpointMetaData metaData,
-		CheckpointOptions options) throws Exception {
+@Internal
+public final class SnapshotUtils {
+	static final long CHECKPOINT_ID = 0L;
 
-		operator.prepareSnapshotPreBarrier(0);
+	public static <OUT, OP extends StreamOperator<OUT>> TaggedOperatorSubtaskState snapshot(
+		OP operator,
+		int index,
+		long timestamp,
+		CheckpointStorageWorkerView checkpointStorage,
+		Path savepointPath) throws Exception {
+
+		CheckpointOptions options = new CheckpointOptions(
+			CheckpointType.SAVEPOINT,
+			AbstractFsCheckpointStorage.encodePathAsReference(savepointPath));
+
+		operator.prepareSnapshotPreBarrier(CHECKPOINT_ID);
 
 		CheckpointStreamFactory storage = checkpointStorage.resolveCheckpointStorageLocation(
-			metaData.getCheckpointId(),
+			CHECKPOINT_ID,
 			options.getTargetLocation());
 
-		operator.prepareSnapshotPreBarrier(0L);
+		operator.prepareSnapshotPreBarrier(CHECKPOINT_ID);
 
 		OperatorSnapshotFutures snapshotInProgress = operator.snapshotState(
-			metaData.getCheckpointId(),
-			metaData.getTimestamp(),
+			CHECKPOINT_ID,
+			timestamp,
 			options,
 			storage);
 
 		OperatorSubtaskState state = new OperatorSnapshotFinalizer(snapshotInProgress).getJobManagerOwnedState();
 
-		operator.notifyCheckpointComplete(0);
-		return state;
+		operator.notifyCheckpointComplete(CHECKPOINT_ID);
+		return new TaggedOperatorSubtaskState(index, state);
 	}
 }

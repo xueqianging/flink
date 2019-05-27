@@ -23,6 +23,10 @@ import org.apache.flink.api.common.state.BroadcastState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.connectors.savepoint.functions.BroadcastStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.functions.StateBootstrapFunction;
+import org.apache.flink.connectors.savepoint.output.BoundedOperator;
+import org.apache.flink.connectors.savepoint.output.SnapshotUtils;
+import org.apache.flink.connectors.savepoint.output.TaggedOperatorSubtaskState;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.operators.AbstractUdfStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -35,15 +39,23 @@ import org.apache.flink.util.FlinkRuntimeException;
  */
 @Internal
 public class BroadcastStateBootstrapOperator<IN>
-	extends AbstractUdfStreamOperator<Void, BroadcastStateBootstrapFunction<IN>>
-	implements OneInputStreamOperator<IN, Void> {
+	extends AbstractUdfStreamOperator<TaggedOperatorSubtaskState, BroadcastStateBootstrapFunction<IN>>
+	implements OneInputStreamOperator<IN, TaggedOperatorSubtaskState>,
+	BoundedOperator {
 
 	private static final long serialVersionUID = 1L;
 
-	private ContextImpl context;
+	private final long timestamp;
 
-	public BroadcastStateBootstrapOperator(BroadcastStateBootstrapFunction<IN> function) {
+	private final Path savepointPath;
+
+	private transient ContextImpl context;
+
+	public BroadcastStateBootstrapOperator(long timestamp, Path savepointPath, BroadcastStateBootstrapFunction<IN> function) {
 		super(function);
+		this.timestamp = timestamp;
+
+		this.savepointPath = savepointPath;
 	}
 
 	@Override
@@ -54,14 +66,23 @@ public class BroadcastStateBootstrapOperator<IN>
 
 	@Override
 	public void processElement(StreamRecord<IN> element) throws Exception {
-		context.element = element;
 		userFunction.processElement(element.getValue(), context);
+	}
+
+	@Override
+	public void endInput() throws Exception {
+		TaggedOperatorSubtaskState state = SnapshotUtils.snapshot(
+			this,
+			getRuntimeContext().getIndexOfThisSubtask(),
+			timestamp,
+			getContainingTask().getCheckpointStorage(),
+			savepointPath);
+
+		output.collect(new StreamRecord<>(state));
 	}
 
 	private class ContextImpl implements BroadcastStateBootstrapFunction.Context {
 		private final ProcessingTimeService processingTimeService;
-
-		private StreamRecord<IN> element;
 
 		ContextImpl(ProcessingTimeService processingTimeService) {
 			this.processingTimeService = processingTimeService;

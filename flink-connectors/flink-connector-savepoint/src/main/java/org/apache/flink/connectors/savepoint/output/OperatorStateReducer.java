@@ -44,7 +44,7 @@ public class OperatorStateReducer implements GroupReduceFunction<OperatorState, 
 	public void reduce(Iterable<OperatorState> values, Collector<Savepoint> out) {
 		Savepoint savepoint =
 			new SavepointV2(
-				0,
+				SnapshotUtils.CHECKPOINT_ID,
 				StreamSupport.stream(values.spliterator(), false).collect(Collectors.toList()),
 				provider.getMasterStates());
 

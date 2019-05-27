@@ -18,54 +18,46 @@
 
 package org.apache.flink.connectors.savepoint.output;
 
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
-import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.CheckpointType;
-import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+import org.apache.flink.connectors.savepoint.runtime.NeverFireProcessingTimeService;
 import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.runtime.state.filesystem.AbstractFsCheckpointStorage;
-import org.apache.flink.streaming.api.operators.StreamOperator;
-import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
+import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
+import org.apache.flink.streaming.api.operators.Output;
+import org.apache.flink.streaming.api.watermark.Watermark;
+import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
+import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
+import org.apache.flink.util.Collector;
+import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.Preconditions;
 
 /**
  * A stream task that pulls elements from an {@link Iterable} instead of the network. After all
- * elements are processed the task takes a snapshot of the subtask operator state.
+ * elements are processed the task takes a snapshot of the subtask operator state. This is a shim
+ * until stream tasks support bounded inputs.
  *
  * @param <IN> Type of the input.
  * @param <OUT> Type of the output.
  * @param <OP> Type of the operator this task runs.
  */
-abstract class BoundedStreamTask<IN, OUT, OP extends StreamOperator<OUT>> extends StreamTask<OUT, OP> {
+class BoundedStreamTask<IN, OUT, OP extends OneInputStreamOperator<IN, OUT> & BoundedOperator>
+	extends StreamTask<OUT, OP> {
+
 	private final Iterable<IN> input;
 
-	private final CheckpointMetaData metaData;
+	private final Collector<OUT> collector;
 
-	private final CheckpointOptions options;
-
-	private OperatorSubtaskState state;
+	private final StreamRecord<IN> reuse;
 
 	private volatile boolean running;
 
 	BoundedStreamTask(
 		Environment environment,
-		ProcessingTimeService timeProvider,
 		Iterable<IN> input,
-		Path savepointPath) {
-		super(environment, timeProvider);
+		Collector<OUT> collector) {
+		super(environment, new NeverFireProcessingTimeService());
 		this.input = input;
-		this.metaData = new CheckpointMetaData(0L, System.currentTimeMillis());
-		this.options = new CheckpointOptions(
-				CheckpointType.SAVEPOINT,
-				AbstractFsCheckpointStorage.encodePathAsReference(savepointPath));
-	}
-
-	protected abstract void process(IN value) throws Exception;
-
-	OperatorSubtaskState getState() {
-		return state;
+		this.collector = collector;
+		this.reuse = new StreamRecord<>(null);
 	}
 
 	@Override
@@ -79,15 +71,19 @@ abstract class BoundedStreamTask<IN, OUT, OP extends StreamOperator<OUT>> extend
 
 	@Override
 	protected void run() throws Exception {
+		headOperator.setup(this, configuration, new CollectorWrapper<>(collector));
+
 		for (IN value : input) {
 			if (!running) {
 				break;
 			}
 
-			process(value);
+			reuse.replace(value);
+			headOperator.setKeyContextElement1(reuse);
+			headOperator.processElement(reuse);
 		}
 
-		state = FinalSnapshot.snapshot(getCheckpointStorage(), headOperator, metaData, options);
+		headOperator.endInput();
 	}
 
 	@Override
@@ -97,5 +93,30 @@ abstract class BoundedStreamTask<IN, OUT, OP extends StreamOperator<OUT>> extend
 
 	@Override
 	protected void cleanup() {}
-}
 
+	private static class CollectorWrapper<OUT> implements Output<StreamRecord<OUT>> {
+
+		private final Collector<OUT> inner;
+
+		private CollectorWrapper(Collector<OUT> inner) {
+			this.inner = inner;
+		}
+
+		@Override
+		public void emitWatermark(Watermark mark) { }
+
+		@Override
+		public <X> void collect(OutputTag<X> outputTag, StreamRecord<X> record) { }
+
+		@Override
+		public void emitLatencyMarker(LatencyMarker latencyMarker) { }
+
+		@Override
+		public void collect(StreamRecord<OUT> record) {
+			inner.collect(record.getValue());
+		}
+
+		@Override
+		public void close() { }
+	}
+}

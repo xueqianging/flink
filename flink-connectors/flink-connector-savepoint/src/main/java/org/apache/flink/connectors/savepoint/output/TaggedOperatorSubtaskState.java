@@ -19,34 +19,51 @@
 package org.apache.flink.connectors.savepoint.output;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.connectors.savepoint.runtime.NeverFireProcessingTimeService;
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
-import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+
+import java.util.Objects;
 
 /**
- * A {@link BoundedOneInputStreamTask} for executing {@link OneInputStreamOperator}'s.
+ * A simple wrapper pojo that tags {@link OperatorSubtaskState} with metadata.
  */
 @Internal
-class BoundedOneInputStreamTask<IN, OUT> extends BoundedStreamTask<IN, OUT, OneInputStreamOperator<IN, OUT>> {
+@SuppressWarnings("WeakerAccess")
+public class TaggedOperatorSubtaskState {
 
-	private final StreamRecord<IN> reuse;
+	public int index;
 
-	BoundedOneInputStreamTask(
-		Environment environment,
-		Path savepointPath,
-		Iterable<IN> elements) {
-		super(environment, new NeverFireProcessingTimeService(), elements, savepointPath);
+	public OperatorSubtaskState state;
 
-		this.reuse = new StreamRecord<>(null);
+	public TaggedOperatorSubtaskState(int index, OperatorSubtaskState state) {
+		this.index = index;
+		this.state = state;
 	}
 
 	@Override
-	protected void process(IN value) throws Exception {
-		reuse.replace(value);
-		headOperator.setKeyContextElement1(reuse);
-		headOperator.processElement(reuse);
+	public boolean equals(Object o) {
+		if (this == o) {
+			return true;
+		} else if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
+
+		TaggedOperatorSubtaskState that = (TaggedOperatorSubtaskState) o;
+		return index == that.index &&
+			Objects.equals(state, that.state);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(index, state);
+	}
+
+	@Override
+	public String toString() {
+		return "TaggedOperatorSubtaskState{" +
+			"index=" + index +
+			", state=" + state +
+			'}';
 	}
 }
+
 

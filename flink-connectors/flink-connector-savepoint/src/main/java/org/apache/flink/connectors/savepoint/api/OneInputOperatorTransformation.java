@@ -31,9 +31,6 @@ import org.apache.flink.connectors.savepoint.functions.BroadcastStateBootstrapFu
 import org.apache.flink.connectors.savepoint.functions.StateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.operators.BroadcastStateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.operators.StateBootstrapOperator;
-import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
-import org.apache.flink.streaming.api.graph.StreamConfig;
-import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.util.keys.KeySelectorUtil;
 
 /**
@@ -61,10 +58,9 @@ public class OneInputOperatorTransformation<T> {
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
 	public BootstrapTransformation<T> transform(StateBootstrapFunction<T> processFunction) {
-		processFunction = dataSet.clean(processFunction);
-		StateBootstrapOperator<T> operator = new StateBootstrapOperator<>(processFunction);
+		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapOperator<>(timestamp, path, processFunction);
 
-		return transform(operator);
+		return transform(factory);
 	}
 
 	/**
@@ -77,10 +73,9 @@ public class OneInputOperatorTransformation<T> {
 	 * @return An {@link BootstrapTransformation} that can be added to a {@link Savepoint}.
 	 */
 	public BootstrapTransformation<T> transform(BroadcastStateBootstrapFunction<T> processFunction) {
-		processFunction = dataSet.clean(processFunction);
-		BroadcastStateBootstrapOperator<T> operator = new BroadcastStateBootstrapOperator<>(processFunction);
+		SavepointWriterOperatorFactory factory = (timestamp, path) -> new BroadcastStateBootstrapOperator<>(timestamp, path, processFunction);
 
-		return transform(operator);
+		return transform(factory);
 	}
 
 	/**
@@ -89,16 +84,11 @@ public class OneInputOperatorTransformation<T> {
 	 *
 	 * <p><b>IMPORTANT:</b> Any output from this operator will be discarded.
 	 *
-	 * @param operator The object containing the transformation logic type of the return stream.
+	 * @param factory A factory returning transformation logic type of the return stream
 	 * @return An {@link BootstrapTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public BootstrapTransformation<T> transform(OneInputStreamOperator<T, ?> operator) {
-		operator = dataSet.clean(operator);
-
-		StreamConfig config = new BoundedStreamConfig();
-		config.setStreamOperator(operator);
-
-		return new BootstrapTransformation<>(dataSet, config);
+	public BootstrapTransformation<T> transform(SavepointWriterOperatorFactory factory) {
+		return new BootstrapTransformation<>(dataSet, factory);
 	}
 
 	/**

@@ -20,7 +20,11 @@ package org.apache.flink.connectors.savepoint.operators;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
+import org.apache.flink.connectors.savepoint.output.BoundedOperator;
+import org.apache.flink.connectors.savepoint.output.SnapshotUtils;
+import org.apache.flink.connectors.savepoint.output.TaggedOperatorSubtaskState;
 import org.apache.flink.connectors.savepoint.runtime.VoidTriggerable;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.streaming.api.SimpleTimerService;
@@ -37,15 +41,23 @@ import org.apache.flink.util.Preconditions;
  */
 @Internal
 public class KeyedStateBootstrapOperator<K, IN>
-	extends AbstractUdfStreamOperator<Void, KeyedStateBootstrapFunction<K, IN>>
-	implements OneInputStreamOperator<IN, Void> {
+	extends AbstractUdfStreamOperator<TaggedOperatorSubtaskState, KeyedStateBootstrapFunction<K, IN>>
+	implements OneInputStreamOperator<IN, TaggedOperatorSubtaskState>,
+	BoundedOperator {
 
 	private static final long serialVersionUID = 1L;
 
+	private final long timestamp;
+
+	private final Path savepointPath;
+
 	private transient KeyedStateBootstrapOperator<K, IN>.ContextImpl context;
 
-	public KeyedStateBootstrapOperator(KeyedStateBootstrapFunction<K, IN> function) {
+	public KeyedStateBootstrapOperator(long timestamp, Path savepointPath, KeyedStateBootstrapFunction<K, IN> function) {
 		super(function);
+
+		this.timestamp = timestamp;
+		this.savepointPath = savepointPath;
 	}
 
 	@Override
@@ -64,16 +76,24 @@ public class KeyedStateBootstrapOperator<K, IN>
 
 	@Override
 	public void processElement(StreamRecord<IN> element) throws Exception {
-		context.element = element;
 		userFunction.processElement(element.getValue(), context);
-		context.element = null;
+	}
+
+	@Override
+	public void endInput() throws Exception {
+		TaggedOperatorSubtaskState state = SnapshotUtils.snapshot(
+			this,
+			getRuntimeContext().getIndexOfThisSubtask(),
+			timestamp,
+			getContainingTask().getCheckpointStorage(),
+			savepointPath);
+
+		output.collect(new StreamRecord<>(state));
 	}
 
 	private class ContextImpl extends KeyedStateBootstrapFunction<K, IN>.Context {
 
 		private final TimerService timerService;
-
-		private StreamRecord<IN> element;
 
 		ContextImpl(KeyedStateBootstrapFunction<K, IN> function, TimerService timerService) {
 			function.super();

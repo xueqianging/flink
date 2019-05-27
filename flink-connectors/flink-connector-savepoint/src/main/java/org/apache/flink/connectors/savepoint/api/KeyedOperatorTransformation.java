@@ -20,14 +20,10 @@ package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.operators.KeyedStateBootstrapOperator;
-import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
-import org.apache.flink.streaming.api.graph.StreamConfig;
-import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 
 /**
  * A {@link KeyedOperatorTransformation} represents a {@link OneInputOperatorTransformation} on which operator state is
@@ -64,10 +60,8 @@ public class KeyedOperatorTransformation<K, T> {
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
 	public BootstrapTransformation<T> transform(KeyedStateBootstrapFunction<K, T> processFunction) {
-		processFunction = dataSet.clean(processFunction);
-		KeyedStateBootstrapOperator<K, T> operator = new KeyedStateBootstrapOperator<>(processFunction);
-
-		return transform(operator);
+		SavepointWriterOperatorFactory factory = (timestamp, path) -> new KeyedStateBootstrapOperator<>(timestamp, path, processFunction);
+		return transform(factory);
 	}
 
 	/**
@@ -76,17 +70,11 @@ public class KeyedOperatorTransformation<K, T> {
 	 *
 	 * <p><b>IMPORTANT:</b> Any output from this operator will be discarded.
 	 *
-	 * @param operator The object containing the transformation logic type of the return stream
+	 * @param factory A factory returning transformation logic type of the return stream
 	 * @return An {@link BootstrapTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public BootstrapTransformation<T> transform(OneInputStreamOperator<T, ?> operator) {
-		operator = dataSet.clean(operator);
-		TypeSerializer<K> keySerializer = keyType.createSerializer(dataSet.getExecutionEnvironment().getConfig());
-
-		StreamConfig config = new BoundedStreamConfig(keySerializer, keySelector);
-		config.setStreamOperator(operator);
-
-		return new BootstrapTransformation<>(dataSet, config, keySelector);
+	private BootstrapTransformation<T> transform(SavepointWriterOperatorFactory factory) {
+		return new BootstrapTransformation<>(dataSet, factory, keySelector, keyType);
 	}
 }
 

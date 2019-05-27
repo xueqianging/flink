@@ -20,6 +20,10 @@ package org.apache.flink.connectors.savepoint.operators;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.connectors.savepoint.functions.StateBootstrapFunction;
+import org.apache.flink.connectors.savepoint.output.BoundedOperator;
+import org.apache.flink.connectors.savepoint.output.SnapshotUtils;
+import org.apache.flink.connectors.savepoint.output.TaggedOperatorSubtaskState;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.operators.AbstractUdfStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -31,15 +35,23 @@ import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
  */
 @Internal
 public class StateBootstrapOperator<IN>
-	extends AbstractUdfStreamOperator<Void, StateBootstrapFunction<IN>>
-	implements OneInputStreamOperator<IN, Void> {
+	extends AbstractUdfStreamOperator<TaggedOperatorSubtaskState, StateBootstrapFunction<IN>>
+	implements OneInputStreamOperator<IN, TaggedOperatorSubtaskState>,
+	BoundedOperator {
 
 	private static final long serialVersionUID = 1L;
 
-	private ContextImpl context;
+	private final long timestamp;
 
-	public StateBootstrapOperator(StateBootstrapFunction<IN> function) {
+	private final Path savepointPath;
+
+	private transient ContextImpl context;
+
+	public StateBootstrapOperator(long timestamp, Path savepointPath, StateBootstrapFunction<IN> function) {
 		super(function);
+
+		this.timestamp = timestamp;
+		this.savepointPath = savepointPath;
 	}
 
 	@Override
@@ -50,14 +62,23 @@ public class StateBootstrapOperator<IN>
 
 	@Override
 	public void processElement(StreamRecord<IN> element) throws Exception {
-		context.element = element;
 		userFunction.processElement(element.getValue(), context);
+	}
+
+	@Override
+	public void endInput() throws Exception {
+		TaggedOperatorSubtaskState state = SnapshotUtils.snapshot(
+			this,
+			getRuntimeContext().getIndexOfThisSubtask(),
+			timestamp,
+			getContainingTask().getCheckpointStorage(),
+			savepointPath);
+
+		output.collect(new StreamRecord<>(state));
 	}
 
 	private class ContextImpl implements StateBootstrapFunction.Context {
 		private final ProcessingTimeService processingTimeService;
-
-		private StreamRecord<IN> element;
 
 		ContextImpl(ProcessingTimeService processingTimeService) {
 			this.processingTimeService = processingTimeService;
