@@ -26,11 +26,8 @@ import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.operators.KeyedStateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
-import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
-
-import javax.annotation.Nullable;
 
 /**
  * A {@link KeyedOperatorTransformation} represents a {@link OneInputOperatorTransformation} on which operator state is
@@ -48,17 +45,13 @@ public class KeyedOperatorTransformation<K, T> {
 
 	private final TypeInformation<K> keyType;
 
-	@Nullable private final TimestampAssigner<T> timestampAssigner;
-
 	KeyedOperatorTransformation(
 		DataSet<T> dataSet,
 		KeySelector<T, K> keySelector,
-		TypeInformation<K> keyType,
-		@Nullable TimestampAssigner<T> timestampAssigner) {
+		TypeInformation<K> keyType) {
 		this.dataSet = dataSet;
 		this.keySelector = keySelector;
 		this.keyType = keyType;
-		this.timestampAssigner = timestampAssigner;
 	}
 
 	/**
@@ -71,6 +64,7 @@ public class KeyedOperatorTransformation<K, T> {
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
 	public BootstrapTransformation<T> transform(KeyedStateBootstrapFunction<K, T> processFunction) {
+		processFunction = dataSet.clean(processFunction);
 		KeyedStateBootstrapOperator<K, T> operator = new KeyedStateBootstrapOperator<>(processFunction);
 
 		return transform(operator);
@@ -83,16 +77,16 @@ public class KeyedOperatorTransformation<K, T> {
 	 * <p><b>IMPORTANT:</b> Any output from this operator will be discarded.
 	 *
 	 * @param operator The object containing the transformation logic type of the return stream
-	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
+	 * @return An {@link BootstrapTransformation} that can be added to a {@link Savepoint}.
 	 */
 	public BootstrapTransformation<T> transform(OneInputStreamOperator<T, ?> operator) {
-		TypeSerializer<K> keySerializer =
-			keyType.createSerializer(dataSet.getExecutionEnvironment().getConfig());
+		operator = dataSet.clean(operator);
+		TypeSerializer<K> keySerializer = keyType.createSerializer(dataSet.getExecutionEnvironment().getConfig());
 
 		StreamConfig config = new BoundedStreamConfig(keySerializer, keySelector);
 		config.setStreamOperator(operator);
 
-		return new BootstrapTransformation<>(dataSet, config, keySelector, timestampAssigner);
+		return new BootstrapTransformation<>(dataSet, config, keySelector);
 	}
 }
 

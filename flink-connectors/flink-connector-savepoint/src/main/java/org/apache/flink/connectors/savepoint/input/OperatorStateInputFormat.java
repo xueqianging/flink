@@ -105,7 +105,7 @@ abstract class OperatorStateInputFormat<OT> extends SavepointInputFormat<OT, Ope
 		StateAssignmentOperation.reDistributePartitionableStates(
 			Collections.singletonList(operatorState),
 			minNumSplits,
-			Collections.singletonList(getOperatorID()),
+			Collections.singletonList(operatorID),
 			newManagedOperatorStates,
 			newRawOperatorStates);
 
@@ -123,7 +123,7 @@ abstract class OperatorStateInputFormat<OT> extends SavepointInputFormat<OT, Ope
 			new BackendRestorerProcedure<>(
 				(handles) -> createOperatorStateBackend(getRuntimeContext(), handles, registry),
 				registry,
-				getUid()
+				uid
 			);
 
 		try {

@@ -21,7 +21,9 @@ package org.apache.flink.connectors.savepoint.api;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.operators.MapPartitionOperator;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connectors.savepoint.operators.BroadcastStateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.output.BoundedOneInputStreamTaskRunner;
 import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataProvider;
 import org.apache.flink.connectors.savepoint.output.partitioner.HashSelector;
@@ -30,7 +32,6 @@ import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 
 import javax.annotation.Nullable;
@@ -49,28 +50,21 @@ public class BootstrapTransformation<T> {
 	@Nullable
 	private final HashSelector<T> keySelector;
 
-	@Nullable
-	private final TimestampAssigner<T> timestampAssigner;
-
 	BootstrapTransformation(
 		DataSet<T> dataSet,
-		StreamConfig config,
-		@Nullable TimestampAssigner<T> timestampAssigner) {
+		StreamConfig config) {
 		this.dataSet = dataSet;
 		this.config = config;
 		this.keySelector = null;
-		this.timestampAssigner = timestampAssigner;
 	}
 
 	<K> BootstrapTransformation(
 		DataSet<T> dataSet,
 		StreamConfig config,
-		KeySelector<T, K> keySelector,
-		@Nullable TimestampAssigner<T> timestampAssigner) {
+		KeySelector<T, K> keySelector) {
 		this.dataSet = dataSet;
 		this.config = config;
 		this.keySelector = new HashSelector<>(keySelector);
-		this.timestampAssigner = timestampAssigner;
 	}
 
 	DataSet<Tuple2<Integer, OperatorSubtaskState>> getOperatorSubtaskStates(
@@ -89,10 +83,17 @@ public class BootstrapTransformation<T> {
 
 		BoundedOneInputStreamTaskRunner<T> operatorRunner = new BoundedOneInputStreamTaskRunner<>(
 			config,
-			timestampAssigner,
 			provider,
 			savepointPath);
 
-		return input.mapPartition(operatorRunner);
+		MapPartitionOperator<T, Tuple2<Integer, OperatorSubtaskState>> subtaskStates = input
+			.mapPartition(operatorRunner)
+			.name(uid);
+
+		if (config.getStreamOperator(getClass().getClassLoader()) instanceof BroadcastStateBootstrapOperator) {
+			subtaskStates = subtaskStates.setParallelism(1);
+		}
+
+		return subtaskStates;
 	}
 }

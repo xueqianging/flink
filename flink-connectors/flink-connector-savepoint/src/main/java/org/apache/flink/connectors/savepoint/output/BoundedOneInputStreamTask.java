@@ -22,11 +22,8 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.connectors.savepoint.runtime.NeverFireProcessingTimeService;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-
-import javax.annotation.Nullable;
 
 /**
  * A {@link BoundedOneInputStreamTask} for executing {@link OneInputStreamOperator}'s.
@@ -34,30 +31,20 @@ import javax.annotation.Nullable;
 @Internal
 class BoundedOneInputStreamTask<IN, OUT> extends BoundedStreamTask<IN, OUT, OneInputStreamOperator<IN, OUT>> {
 
-	@Nullable private final TimestampAssigner<IN> timestampAssigner;
-
 	private final StreamRecord<IN> reuse;
 
 	BoundedOneInputStreamTask(
 		Environment environment,
 		Path savepointPath,
-		Iterable<IN> elements,
-		@Nullable TimestampAssigner<IN> timestampAssigner) {
+		Iterable<IN> elements) {
 		super(environment, new NeverFireProcessingTimeService(), elements, savepointPath);
 
-		this.timestampAssigner = timestampAssigner;
 		this.reuse = new StreamRecord<>(null);
 	}
 
 	@Override
 	protected void process(IN value) throws Exception {
 		reuse.replace(value);
-
-		if (timestampAssigner != null) {
-			long timestamp = timestampAssigner.extractTimestamp(value, Long.MIN_VALUE);
-			reuse.setTimestamp(timestamp);
-		}
-
 		headOperator.setKeyContextElement1(reuse);
 		headOperator.processElement(reuse);
 	}

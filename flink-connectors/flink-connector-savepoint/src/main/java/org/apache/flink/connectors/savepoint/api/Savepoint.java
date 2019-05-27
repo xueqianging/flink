@@ -20,6 +20,7 @@ package org.apache.flink.connectors.savepoint.api;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.StateBackend;
 
 /**
@@ -55,6 +56,7 @@ public final class Savepoint {
 	 * @return A new savepoint.
 	 */
 	static NewSavepoint create(StateBackend stateBackend, int maxParallelism) {
+		maxParallelism = KeyGroupRangeAssignment.computeDefaultMaxParallelism(maxParallelism);
 		return new NewSavepoint(stateBackend, maxParallelism);
 	}
 }

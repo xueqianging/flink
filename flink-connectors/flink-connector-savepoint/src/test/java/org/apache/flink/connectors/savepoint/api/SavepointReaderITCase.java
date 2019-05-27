@@ -111,7 +111,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 		// If we don't do this the tests will fail.
 		miniClusterResource.after();
 		miniClusterResource.before();
-		runKeyedState(new RocksDBStateBackend(new MemoryStateBackend()));
+		runKeyedState(new RocksDBStateBackend((StateBackend) new MemoryStateBackend()));
 	}
 
 	private void runKeyedState(StateBackend backend) throws Exception {
@@ -279,12 +279,12 @@ public class SavepointReaderITCase extends AbstractTestBase {
 		private ListState<Integer> unionState;
 
 		@Override
-		public void open(Configuration parameters) throws Exception {
+		public void open(Configuration parameters) {
 			elements = new ArrayList<>();
 		}
 
 		@Override
-		public void processElement(Integer value, ReadOnlyContext ctx, Collector<Void> out) throws Exception {
+		public void processElement(Integer value, ReadOnlyContext ctx, Collector<Void> out) {
 			elements.add(value);
 		}
 
@@ -317,7 +317,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 		private transient ValueState<Integer> state;
 
 		@Override
-		public void open(Configuration parameters) throws Exception {
+		public void open(Configuration parameters) {
 			state = getRuntimeContext().getState(valueState);
 		}
 
@@ -332,7 +332,7 @@ public class SavepointReaderITCase extends AbstractTestBase {
 		private transient ValueState<Integer> state;
 
 		@Override
-		public void open(Configuration parameters) throws Exception {
+		public void open(Configuration parameters) {
 			state = getRuntimeContext().getState(valueState);
 		}
 

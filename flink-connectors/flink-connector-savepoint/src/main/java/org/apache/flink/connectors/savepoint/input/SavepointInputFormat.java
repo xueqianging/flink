@@ -44,9 +44,10 @@ import java.io.IOException;
 abstract class SavepointInputFormat<OT, T extends InputSplit> extends RichInputFormat<OT, T> {
 	private final String savepointPath;
 
-	private final String uid;
+	protected final String uid;
 
-	private final OperatorID operatorID;
+	@SuppressWarnings("WeakerAccess")
+	protected final OperatorID operatorID;
 
 	@Nullable
 	private transient SavepointStatistics statistics;
@@ -63,7 +64,7 @@ abstract class SavepointInputFormat<OT, T extends InputSplit> extends RichInputF
 	}
 
 	@Override
-	public BaseStatistics getStatistics(BaseStatistics cachedStatistics) throws IOException {
+	public BaseStatistics getStatistics(BaseStatistics cachedStatistics) {
 		return statistics;
 	}
 
@@ -93,14 +94,6 @@ abstract class SavepointInputFormat<OT, T extends InputSplit> extends RichInputF
 		}
 
 		throw new IOException("Savepoint does not contain state with operator uid " + uid);
-	}
-
-	protected final String getUid() {
-		return uid;
-	}
-
-	protected final OperatorID getOperatorID() {
-		return operatorID;
 	}
 
 	private static class SavepointStatistics implements BaseStatistics {

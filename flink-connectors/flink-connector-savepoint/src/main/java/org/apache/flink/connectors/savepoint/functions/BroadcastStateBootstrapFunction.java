@@ -20,15 +20,16 @@ package org.apache.flink.connectors.savepoint.functions;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.functions.AbstractRichFunction;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
+import org.apache.flink.api.common.state.BroadcastState;
+import org.apache.flink.api.common.state.MapStateDescriptor;
 
 /**
- * Interface for writing elements to operator state.
+ * Interface for writing elements to broadcast state.
  *
  * @param <IN> The type of the input.
  */
 @PublicEvolving
-public abstract class StateBootstapFunction<IN> extends AbstractRichFunction implements CheckpointedFunction {
+public abstract class BroadcastStateBootstrapFunction<IN> extends AbstractRichFunction  {
 
 	/**
 	 * Writes the given value to operator state. This function is called for every record.
@@ -40,11 +41,11 @@ public abstract class StateBootstapFunction<IN> extends AbstractRichFunction imp
 	public abstract void processElement(IN value, Context ctx) throws Exception;
 
 	/**
-	 * Context that {@link StateBootstapFunction}'s can use for getting additional data about an input
+	 * Context that {@link StateBootstrapFunction}'s can use for getting additional data about an input
 	 * record.
 	 *
 	 * <p>The context is only valid for the duration of a {@link
-	 * StateBootstapFunction#processElement(Object, Context)} call. Do not store the context and use
+	 * #processElement(Object, Context)} call. Do not store the context and use
 	 * afterwards!
 	 */
 	public interface Context {
@@ -53,9 +54,11 @@ public abstract class StateBootstapFunction<IN> extends AbstractRichFunction imp
 		long currentProcessingTime();
 
 		/**
-		 * Returns the timestamp of the current input record or {@code null} if the element does not
-		 * have an assigned timestamp.
+		 * Fetches the {@link BroadcastState} with the specified name.
+		 *
+		 * @param descriptor the {@link MapStateDescriptor} of the state to be fetched.
+		 * @return The required {@link BroadcastState broadcast state}.
 		 */
-		Long timestamp();
+		<K, V> BroadcastState<K, V> getBroadcastState(MapStateDescriptor<K, V> descriptor);
 	}
 }

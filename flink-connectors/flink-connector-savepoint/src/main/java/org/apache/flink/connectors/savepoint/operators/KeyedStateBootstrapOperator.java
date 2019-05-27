@@ -81,17 +81,6 @@ public class KeyedStateBootstrapOperator<K, IN>
 		}
 
 		@Override
-		public Long timestamp() {
-			Preconditions.checkState(element != null);
-
-			if (element.hasTimestamp()) {
-				return element.getTimestamp();
-			} else {
-				return null;
-			}
-		}
-
-		@Override
 		public TimerService timerService() {
 			return timerService;
 		}

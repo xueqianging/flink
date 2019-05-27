@@ -27,17 +27,14 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
-import org.apache.flink.connectors.savepoint.functions.StateBootstapFunction;
+import org.apache.flink.connectors.savepoint.functions.BroadcastStateBootstrapFunction;
+import org.apache.flink.connectors.savepoint.functions.StateBootstrapFunction;
+import org.apache.flink.connectors.savepoint.operators.BroadcastStateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.operators.StateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
-import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.util.keys.KeySelectorUtil;
-
-import javax.annotation.Nullable;
-
-import java.util.function.Function;
 
 /**
  * {@code OneInputOperatorTransformation} represents a user defined transformation applied on
@@ -45,51 +42,43 @@ import java.util.function.Function;
  *
  * @param <T> The type of the elements in this operator.
  */
-@SuppressWarnings("WeakerAccess")
 @PublicEvolving
+@SuppressWarnings("WeakerAccess")
 public class OneInputOperatorTransformation<T> {
 	private final DataSet<T> dataSet;
-
-	@Nullable
-	private TimestampAssigner<T> timestampAssigner;
 
 	OneInputOperatorTransformation(DataSet<T> dataSet) {
 		this.dataSet = dataSet;
 	}
 
 	/**
-	 * Assigns timestamps to the elements in the {@code OperatorTransformation}.
-	 *
-	 * @param timestampAssigner The implementation of the timestamp assigner.
-	 * @return The stream after the transformation, with assigned timestamps.
-	 */
-	public OneInputOperatorTransformation<T> assignTimestamps(TimestampAssigner<T> timestampAssigner) {
-		this.timestampAssigner = timestampAssigner;
-		return this;
-	}
-
-	/**
-	 * Assigns timestamps to the elements in the {@code OperatorTransformation}.
-	 *
-	 * @param timestampAssigner Returns the timestamp associated with each element.
-	 * @return The stream after the transformation, with assigned timestamps.
-	 */
-	public OneInputOperatorTransformation<T> assignTimestamps(Function<T, Long> timestampAssigner) {
-		this.timestampAssigner = (element, _unused) -> timestampAssigner.apply(element);
-		return this;
-	}
-
-	/**
-	 * Applies the given {@link StateBootstapFunction} on the non-keyed input.
+	 * Applies the given {@link StateBootstrapFunction} on the non-keyed input.
 	 *
 	 * <p>The function will be called for every element in the input and can be used for writing
 	 * operator state into a {@link Savepoint}.
 	 *
-	 * @param processFunction The {@link StateBootstapFunction} that is called for each element.
+	 * @param processFunction The {@link StateBootstrapFunction} that is called for each element.
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
-	public BootstrapTransformation<T> transform(StateBootstapFunction<T> processFunction) {
+	public BootstrapTransformation<T> transform(StateBootstrapFunction<T> processFunction) {
+		processFunction = dataSet.clean(processFunction);
 		StateBootstrapOperator<T> operator = new StateBootstrapOperator<>(processFunction);
+
+		return transform(operator);
+	}
+
+	/**
+	 * Applies the given {@link BroadcastStateBootstrapFunction} on the non-keyed input.
+	 *
+	 * <p>The function will be called for every element in the input and can be used for writing
+	 * broadcast state into a {@link Savepoint}.
+	 *
+	 * @param processFunction The {@link BroadcastStateBootstrapFunction} that is called for each element.
+	 * @return An {@link BootstrapTransformation} that can be added to a {@link Savepoint}.
+	 */
+	public BootstrapTransformation<T> transform(BroadcastStateBootstrapFunction<T> processFunction) {
+		processFunction = dataSet.clean(processFunction);
+		BroadcastStateBootstrapOperator<T> operator = new BroadcastStateBootstrapOperator<>(processFunction);
 
 		return transform(operator);
 	}
@@ -101,13 +90,15 @@ public class OneInputOperatorTransformation<T> {
 	 * <p><b>IMPORTANT:</b> Any output from this operator will be discarded.
 	 *
 	 * @param operator The object containing the transformation logic type of the return stream.
-	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
+	 * @return An {@link BootstrapTransformation} that can be added to a {@link Savepoint}.
 	 */
 	public BootstrapTransformation<T> transform(OneInputStreamOperator<T, ?> operator) {
+		operator = dataSet.clean(operator);
+
 		StreamConfig config = new BoundedStreamConfig();
 		config.setStreamOperator(operator);
 
-		return new BootstrapTransformation<>(dataSet, config, timestampAssigner);
+		return new BootstrapTransformation<>(dataSet, config);
 	}
 
 	/**
@@ -115,11 +106,11 @@ public class OneInputOperatorTransformation<T> {
 	 * states.
 	 *
 	 * @param keySelector The KeySelector to be used for extracting the key for partitioning.
-	 * @return The {@code OperatorTransformation} with partitioned state.
+	 * @return The {@code BootstrapTransformation} with partitioned state.
 	 */
 	public <K> KeyedOperatorTransformation<K, T> keyBy(KeySelector<T, K> keySelector) {
 		TypeInformation<K> keyType = TypeExtractor.getKeySelectorTypes(keySelector, dataSet.getType());
-		return new KeyedOperatorTransformation<>(dataSet, keySelector, keyType, timestampAssigner);
+		return new KeyedOperatorTransformation<>(dataSet, keySelector, keyType);
 	}
 
 	/**
@@ -128,10 +119,10 @@ public class OneInputOperatorTransformation<T> {
 	 *
 	 * @param keySelector The KeySelector to be used for extracting the key for partitioning.
 	 * @param keyType The type information describing the key type.
-	 * @return The {@code OperatorTransformation} with partitioned state.
+	 * @return The {@code BootstrapTransformation} with partitioned state.
 	 */
 	public <K> KeyedOperatorTransformation<K, T> keyBy(KeySelector<T, K> keySelector, TypeInformation<K> keyType) {
-		return new KeyedOperatorTransformation<>(dataSet, keySelector, keyType, timestampAssigner);
+		return new KeyedOperatorTransformation<>(dataSet, keySelector, keyType);
 	}
 
 	/**
@@ -169,7 +160,7 @@ public class OneInputOperatorTransformation<T> {
 			dataSet.getExecutionEnvironment().getConfig());
 
 		TypeInformation<Tuple> keyType = TypeExtractor.getKeySelectorTypes(keySelector, dataSet.getType());
-		return new KeyedOperatorTransformation<>(dataSet, keySelector, keyType, timestampAssigner);
+		return new KeyedOperatorTransformation<>(dataSet, keySelector, keyType);
 	}
 }
 

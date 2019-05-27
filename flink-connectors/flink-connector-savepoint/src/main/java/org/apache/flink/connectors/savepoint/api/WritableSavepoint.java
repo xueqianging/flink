@@ -35,8 +35,8 @@ import java.util.Map;
  * Any savepoint that can be written to from a batch context.
  * @param <F> The implementation type.
  */
-@SuppressWarnings("WeakerAccess")
 @PublicEvolving
+@SuppressWarnings("WeakerAccess")
 public abstract class WritableSavepoint<F extends WritableSavepoint> {
 
 	/**
@@ -82,9 +82,10 @@ public abstract class WritableSavepoint<F extends WritableSavepoint> {
 		}
 
 		finalOperatorStates
-			.union(existingOperators)
 			.reduceGroup(new OperatorStateReducer(provider))
-			.output(new SavepointOutputFormat(savepointPath));
+			.name("reduce(OperatorState)")
+			.output(new SavepointOutputFormat(savepointPath))
+			.name(savepointPath.toString());
 	}
 
 	@SuppressWarnings("unchecked")
@@ -98,6 +99,7 @@ public abstract class WritableSavepoint<F extends WritableSavepoint> {
 
 		return operator
 			.getOperatorSubtaskStates(uid, stateBackend, provider, savepointPath)
-			.reduceGroup(new OperatorSubtaskStateReducer(uid, provider));
+			.reduceGroup(new OperatorSubtaskStateReducer(uid, provider))
+			.name("reduce(OperatorSubtaskState)");
 	}
 }

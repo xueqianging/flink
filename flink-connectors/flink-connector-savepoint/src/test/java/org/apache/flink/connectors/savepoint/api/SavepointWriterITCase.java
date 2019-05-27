@@ -22,6 +22,7 @@ import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
+import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.Types;
@@ -30,8 +31,9 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.ProgramInvocationException;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connectors.savepoint.functions.BroadcastStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.functions.KeyedStateBootstrapFunction;
-import org.apache.flink.connectors.savepoint.functions.StateBootstapFunction;
+import org.apache.flink.connectors.savepoint.functions.StateBootstrapFunction;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
@@ -42,6 +44,7 @@ import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.co.BroadcastProcessFunction;
 import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.test.util.AbstractTestBase;
@@ -67,6 +70,15 @@ import java.util.concurrent.ConcurrentSkipListSet;
  */
 @RunWith(value = Parameterized.class)
 public class SavepointWriterITCase extends AbstractTestBase {
+	private static final String ACCOUNT_UID = "accounts";
+
+	private static final String CURRENCY_UID = "currency";
+
+	private static final String MODIFY_UID = "numbers";
+
+	private static final MapStateDescriptor<String, Double> descriptor = new MapStateDescriptor<>(
+		"currency-rate", Types.STRING, Types.DOUBLE);
+
 	private final StateBackend backend;
 
 	private static final Collection<Account> accounts = Arrays.asList(
@@ -74,8 +86,17 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		new Account(2, 100.0),
 		new Account(3, 100.0));
 
-	public SavepointWriterITCase(StateBackend backend) {
+	private static final Collection<CurrencyRate> currencyRates = Arrays.asList(
+		new CurrencyRate("USD", 1.0),
+		new CurrencyRate("EUR", 1.3)
+	);
+
+	public SavepointWriterITCase(StateBackend backend) throws Exception {
 		this.backend = backend;
+
+		//reset the cluster so we can change the state backend
+		miniClusterResource.after();
+		miniClusterResource.before();
 	}
 
 	@Parameterized.Parameters(name = "Savepoint Writer: {0}")
@@ -87,42 +108,45 @@ public class SavepointWriterITCase extends AbstractTestBase {
 
 	@Test
 	public void testStateBootstrapAndModification() throws Exception {
-		final String uid = "accounts";
-		final String modify = "numbers";
-
 		final String savepointPath = getTempDirPath(new AbstractID().toHexString());
 
-		bootstrapState(uid, savepointPath);
+		bootstrapState(savepointPath);
 
-		validateBootstrap(uid, savepointPath);
+		validateBootstrap(savepointPath);
 
 		final String modifyPath = getTempDirPath(new AbstractID().toHexString());
 
-		modifySavepoint(modify, savepointPath, modifyPath);
+		modifySavepoint(savepointPath, modifyPath);
 
-		validateModification(uid, modify, modifyPath);
+		validateModification(modifyPath);
 	}
 
-	private void bootstrapState(String uid, String savepointPath) throws Exception {
+	private void bootstrapState(String savepointPath) throws Exception {
 		ExecutionEnvironment bEnv = ExecutionEnvironment.getExecutionEnvironment();
 
-		DataSet<Account> data = bEnv.fromCollection(accounts);
+		DataSet<Account> accountDataSet = bEnv.fromCollection(accounts);
 
 		BootstrapTransformation<Account> transformation = OperatorTransformation
-			.bootstrapWith(data)
-			.assignTimestamps(account -> account.timestamp)
+			.bootstrapWith(accountDataSet)
 			.keyBy(acc -> acc.id)
 			.transform(new AccountBootstrapper());
 
+		DataSet<CurrencyRate> currencyDataSet = bEnv.fromCollection(currencyRates);
+
+		BootstrapTransformation<CurrencyRate> broadcastTransformation = OperatorTransformation
+			.bootstrapWith(currencyDataSet)
+			.transform(new CurrencyBootstrapFunction());
+
 		Savepoint
 			.create(backend, 128)
-			.withOperator(uid, transformation)
+			.withOperator(ACCOUNT_UID, transformation)
+			.withOperator(CURRENCY_UID, broadcastTransformation)
 			.write(savepointPath);
 
 		bEnv.execute("Bootstrap");
 	}
 
-	private void validateBootstrap(String uid, String savepointPath) throws ProgramInvocationException {
+	private void validateBootstrap(String savepointPath) throws ProgramInvocationException {
 		StreamExecutionEnvironment sEnv = StreamExecutionEnvironment.getExecutionEnvironment();
 		sEnv.setStateBackend(backend);
 
@@ -131,11 +155,18 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		sEnv.fromCollection(accounts)
 			.keyBy(acc -> acc.id)
 			.flatMap(new UpdateAndGetAccount())
-			.uid(uid)
+			.uid(ACCOUNT_UID)
 			.addSink(new CollectSink());
 
+		sEnv
+			.fromCollection(currencyRates)
+			.connect(sEnv.fromCollection(currencyRates).broadcast(descriptor))
+			.process(new CurrencyValidationFunction())
+			.uid(CURRENCY_UID)
+			.addSink(new DiscardingSink<>());
+
 		JobGraph jobGraph = sEnv.getStreamGraph().getJobGraph();
-		jobGraph.setSavepointRestoreSettings(SavepointRestoreSettings.forPath(savepointPath, true));
+		jobGraph.setSavepointRestoreSettings(SavepointRestoreSettings.forPath(savepointPath, false));
 
 		ClusterClient<?> client = miniClusterResource.getClusterClient();
 		client.submitJob(jobGraph, SavepointWriterITCase.class.getClassLoader());
@@ -143,7 +174,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		Assert.assertEquals("Unexpected output", 3, CollectSink.accountList.size());
 	}
 
-	private void modifySavepoint(String modify, String savepointPath, String modifyPath) throws Exception {
+	private void modifySavepoint(String savepointPath, String modifyPath) throws Exception {
 		ExecutionEnvironment bEnv = ExecutionEnvironment.getExecutionEnvironment();
 
 		DataSet<Integer> data = bEnv.fromElements(1, 2, 3);
@@ -154,13 +185,14 @@ public class SavepointWriterITCase extends AbstractTestBase {
 
 		Savepoint
 			.load(bEnv, savepointPath, backend)
-			.withOperator(modify, transformation)
+			.removeOperator(CURRENCY_UID)
+			.withOperator(MODIFY_UID, transformation)
 			.write(modifyPath);
 
 		bEnv.execute("Modifying");
 	}
 
-	private void validateModification(String uid, String modify, String savepointPath) throws ProgramInvocationException {
+	private void validateModification(String savepointPath) throws ProgramInvocationException {
 		StreamExecutionEnvironment sEnv = StreamExecutionEnvironment.getExecutionEnvironment();
 		sEnv.setStateBackend(backend);
 
@@ -169,18 +201,18 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		DataStream<Account> stream = sEnv.fromCollection(accounts)
 			.keyBy(acc -> acc.id)
 			.flatMap(new UpdateAndGetAccount())
-			.uid(uid);
+			.uid(ACCOUNT_UID);
 
 		stream.addSink(new CollectSink());
 
 		stream
 			.map(acc -> acc.id)
 			.map(new StatefulOperator())
-			.uid(modify)
+			.uid(MODIFY_UID)
 			.addSink(new DiscardingSink<>());
 
 		JobGraph jobGraph = sEnv.getStreamGraph().getJobGraph();
-		jobGraph.setSavepointRestoreSettings(SavepointRestoreSettings.forPath(savepointPath, true));
+		jobGraph.setSavepointRestoreSettings(SavepointRestoreSettings.forPath(savepointPath, false));
 
 		ClusterClient<?> client = miniClusterResource.getClusterClient();
 		client.submitJob(jobGraph, SavepointWriterITCase.class.getClassLoader());
@@ -191,6 +223,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 	/**
 	 * A simple pojo.
 	 */
+	@SuppressWarnings("WeakerAccess")
 	public static class Account {
 		Account(int id, double amount) {
 			this.id = id;
@@ -216,13 +249,40 @@ public class SavepointWriterITCase extends AbstractTestBase {
 	}
 
 	/**
+	 * A simple pojo.
+	 */
+	@SuppressWarnings("WeakerAccess")
+	public static class CurrencyRate {
+		public String currency;
+
+		public Double rate;
+
+		CurrencyRate(String currency, double rate) {
+			this.currency = currency;
+			this.rate = rate;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof CurrencyRate
+				&& ((CurrencyRate) obj).currency.equals(currency)
+				&& ((CurrencyRate) obj).rate.equals(rate);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(currency, rate);
+		}
+	}
+
+	/**
 	 * A savepoint writer function.
 	 */
 	public static class AccountBootstrapper extends KeyedStateBootstrapFunction<Integer, Account> {
 		ValueState<Double> state;
 
 		@Override
-		public void open(Configuration parameters) throws Exception {
+		public void open(Configuration parameters) {
 			ValueStateDescriptor<Double> descriptor = new ValueStateDescriptor<>("total", Types.DOUBLE);
 			state = getRuntimeContext().getState(descriptor);
 		}
@@ -262,18 +322,18 @@ public class SavepointWriterITCase extends AbstractTestBase {
 	/**
 	 * A bootstrap function.
 	 */
-	public static class ModifyProcessFunction extends StateBootstapFunction<Integer> {
+	public static class ModifyProcessFunction extends StateBootstrapFunction<Integer> {
 		List<Integer> numbers;
 
 		ListState<Integer> state;
 
 		@Override
-		public void open(Configuration parameters) throws Exception {
+		public void open(Configuration parameters) {
 			numbers = new ArrayList<>();
 		}
 
 		@Override
-		public void processElement(Integer value, Context ctx) throws Exception {
+		public void processElement(Integer value, Context ctx) {
 			numbers.add(value);
 		}
 
@@ -300,7 +360,7 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		ListState<Integer> state;
 
 		@Override
-		public void open(Configuration parameters) throws Exception {
+		public void open(Configuration parameters) {
 			numbers = new ArrayList<>();
 		}
 
@@ -332,8 +392,39 @@ public class SavepointWriterITCase extends AbstractTestBase {
 		}
 
 		@Override
-		public Integer map(Integer value) throws Exception {
+		public Integer map(Integer value) {
 			return null;
+		}
+	}
+
+	/**
+	 * A broadcast bootstrap function.
+	 */
+	public static class CurrencyBootstrapFunction extends BroadcastStateBootstrapFunction<CurrencyRate> {
+
+		@Override
+		public void processElement(CurrencyRate value, Context ctx) throws Exception {
+			ctx.getBroadcastState(descriptor).put(value.currency, value.rate);
+		}
+	}
+
+	/**
+	 * Checks the restored broadcast state.
+	 */
+	public static class CurrencyValidationFunction extends BroadcastProcessFunction<CurrencyRate, CurrencyRate, Void> {
+
+		@Override
+		public void processElement(CurrencyRate value, ReadOnlyContext ctx, Collector<Void> out) throws Exception {
+			Assert.assertEquals(
+				"Incorrect currency rate",
+				value.rate,
+				ctx.getBroadcastState(descriptor).get(value.currency),
+				0.0001);
+		}
+
+		@Override
+		public void processBroadcastElement(CurrencyRate value, Context ctx, Collector<Void> out) {
+			//ignore
 		}
 	}
 

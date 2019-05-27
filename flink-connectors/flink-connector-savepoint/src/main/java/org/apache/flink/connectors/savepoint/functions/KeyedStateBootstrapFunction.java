@@ -59,13 +59,6 @@ public abstract class KeyedStateBootstrapFunction<K, IN> extends AbstractRichFun
 	/** Information available in an invocation of {@link #processElement(Object, Context)}. */
 	public abstract class Context {
 
-		/**
-		 * Timestamp of the element currently being processed or timestamp of a firing timer.
-		 *
-		 * <p>This might be {@code null}, if no timestamp has been assigned to the element.
-		 */
-		public abstract Long timestamp();
-
 		/** A {@link TimerService} for querying time and registering timers. */
 		public abstract TimerService timerService();
 

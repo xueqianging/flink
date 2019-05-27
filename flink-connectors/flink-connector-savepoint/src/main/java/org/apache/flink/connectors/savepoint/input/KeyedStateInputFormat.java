@@ -117,34 +117,6 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		return getKeyGroupRangeInputSplits(minNumSplits, operatorState);
 	}
 
-	@VisibleForTesting
-	static KeyGroupRangeInputSplit[] getKeyGroupRangeInputSplits(int minNumSplits, OperatorState operatorState) {
-		final int maxParallelism = operatorState.getMaxParallelism();
-
-		final List<KeyGroupRange> keyGroups = sortedKeyGroupRanges(minNumSplits, maxParallelism);
-
-		return CollectionUtil.mapWithIndex(
-			keyGroups,
-			(keyGroupRange, index) -> createKeyGroupRangeInputSplit(
-				operatorState,
-				maxParallelism,
-				keyGroupRange,
-				index)
-		).toArray(KeyGroupRangeInputSplit[]::new);
-	}
-
-	private static KeyGroupRangeInputSplit createKeyGroupRangeInputSplit(
-		OperatorState operatorState,
-		int maxParallelism,
-		KeyGroupRange keyGroupRange,
-		Integer index) {
-
-		final List<KeyedStateHandle> managedKeyedState = StateAssignmentOperation.getManagedKeyedStateHandles(operatorState, keyGroupRange);
-		final List<KeyedStateHandle> rawKeyedState = StateAssignmentOperation.getRawKeyedStateHandles(operatorState, keyGroupRange);
-
-		return new KeyGroupRangeInputSplit(managedKeyedState, rawKeyedState, maxParallelism, index);
-	}
-
 	@Override
 	protected long getStateSize(OperatorSubtaskState state) {
 		return state.getManagedKeyedState().getStateSize();
@@ -205,8 +177,8 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 
 		try {
 			return initializer.streamOperatorStateContext(
-				getOperatorID(),
-				getUid(),
+				operatorID,
+				uid,
 				this,
 				keySerializer,
 				registry,
@@ -264,10 +236,34 @@ public class KeyedStateInputFormat<K, OUT> extends SavepointInputFormat<OUT, Key
 		return keyedStateBackend.getCurrentKey();
 	}
 
-	/**
-	 * Re-partition the key group ranges for n splits using the same logic as if restoring a job with
-	 * parallelism n.
-	 */
+	@VisibleForTesting
+	static KeyGroupRangeInputSplit[] getKeyGroupRangeInputSplits(int minNumSplits, OperatorState operatorState) {
+		final int maxParallelism = operatorState.getMaxParallelism();
+
+		final List<KeyGroupRange> keyGroups = sortedKeyGroupRanges(minNumSplits, maxParallelism);
+
+		return CollectionUtil.mapWithIndex(
+			keyGroups,
+			(keyGroupRange, index) -> createKeyGroupRangeInputSplit(
+				operatorState,
+				maxParallelism,
+				keyGroupRange,
+				index)
+		).toArray(KeyGroupRangeInputSplit[]::new);
+	}
+
+	private static KeyGroupRangeInputSplit createKeyGroupRangeInputSplit(
+		OperatorState operatorState,
+		int maxParallelism,
+		KeyGroupRange keyGroupRange,
+		Integer index) {
+
+		final List<KeyedStateHandle> managedKeyedState = StateAssignmentOperation.getManagedKeyedStateHandles(operatorState, keyGroupRange);
+		final List<KeyedStateHandle> rawKeyedState = StateAssignmentOperation.getRawKeyedStateHandles(operatorState, keyGroupRange);
+
+		return new KeyGroupRangeInputSplit(managedKeyedState, rawKeyedState, maxParallelism, index);
+	}
+
 	@Nonnull
 	private static List<KeyGroupRange> sortedKeyGroupRanges(int minNumSplits, int maxParallelism) {
 		List<KeyGroupRange> keyGroups = StateAssignmentOperation.createKeyGroupPartitions(

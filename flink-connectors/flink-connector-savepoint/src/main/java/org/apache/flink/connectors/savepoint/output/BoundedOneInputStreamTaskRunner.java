@@ -26,11 +26,8 @@ import org.apache.flink.connectors.savepoint.output.metadata.SavepointMetadataPr
 import org.apache.flink.connectors.savepoint.runtime.SavepointEnvironment;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
-import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.util.Collector;
-
-import javax.annotation.Nullable;
 
 /**
  * A {@link RichMapPartitionFunction} that serves as the runtime for a {@link
@@ -46,32 +43,26 @@ import javax.annotation.Nullable;
 public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunction<IN, Tuple2<Integer, OperatorSubtaskState>> {
 	private final StreamConfig streamConfig;
 
-	@Nullable
-	private final TimestampAssigner<IN> timestampAssigner;
-
 	private final SavepointMetadataProvider provider;
 
 	private final Path savepointPath;
 
-	private int maxParallelism;
+	private transient SavepointEnvironment env;
 
 	/**
 	 * Create a new {@link BoundedOneInputStreamTaskRunner}.
 	 *
 	 * @param streamConfig The internal configuration for the task.
-	 * @param timestampAssigner An optional timestamp assigner for the records.
 	 * @param provider Provides the max parallelism of the operator. Equivalent to setting {@link
 	 *     org.apache.flink.streaming.api.environment.StreamExecutionEnvironment#setMaxParallelism(int)}.
 	 * @param savepointPath The directory where the savepoint should be written.
 	 */
 	public BoundedOneInputStreamTaskRunner(
 		StreamConfig streamConfig,
-		@Nullable TimestampAssigner<IN> timestampAssigner,
 		SavepointMetadataProvider provider,
 		Path savepointPath) {
 
 		this.streamConfig = streamConfig;
-		this.timestampAssigner = timestampAssigner;
 		this.provider = provider;
 		this.savepointPath = savepointPath;
 	}
@@ -79,21 +70,21 @@ public class BoundedOneInputStreamTaskRunner<IN> extends RichMapPartitionFunctio
 	@Override
 	public void open(Configuration parameters) throws Exception {
 		super.open(parameters);
-		maxParallelism = provider.maxParallelism();
-	}
+		int maxParallelism = provider.maxParallelism();
 
-	@Override
-	public void mapPartition(Iterable<IN> values, Collector<Tuple2<Integer, OperatorSubtaskState>> out) throws Exception {
-		SavepointEnvironment env = new SavepointEnvironment
+		 env = new SavepointEnvironment
 			.Builder(getRuntimeContext(), maxParallelism)
 			.setConfiguration(streamConfig.getConfiguration())
 			.build();
 
+	}
+
+	@Override
+	public void mapPartition(Iterable<IN> values, Collector<Tuple2<Integer, OperatorSubtaskState>> out) throws Exception {
 		BoundedOneInputStreamTask<IN, ?> task = new BoundedOneInputStreamTask<>(
 			env,
 			savepointPath,
-			values,
-			timestampAssigner);
+			values);
 
 		task.invoke();
 

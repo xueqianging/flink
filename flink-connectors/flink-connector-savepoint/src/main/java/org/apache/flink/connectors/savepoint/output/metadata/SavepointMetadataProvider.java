@@ -34,7 +34,14 @@ import java.util.Collection;
  */
 @Internal
 public interface SavepointMetadataProvider extends Serializable {
+
+	/**
+	 * @return The max parallelism for the savepoint.
+	 */
 	int maxParallelism();
 
+	/**
+	 * @return Masters states for the savepoint.
+	 */
 	Collection<MasterState> getMasterStates();
 }

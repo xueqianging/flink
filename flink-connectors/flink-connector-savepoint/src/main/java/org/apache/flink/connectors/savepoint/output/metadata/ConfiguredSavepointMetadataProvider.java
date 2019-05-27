@@ -45,4 +45,5 @@ public class ConfiguredSavepointMetadataProvider implements SavepointMetadataPro
 	public Collection<MasterState> getMasterStates() {
 		return Collections.emptyList();
 	}
+
 }

@@ -19,26 +19,30 @@
 package org.apache.flink.connectors.savepoint.operators;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.state.BroadcastState;
+import org.apache.flink.api.common.state.MapStateDescriptor;
+import org.apache.flink.connectors.savepoint.functions.BroadcastStateBootstrapFunction;
 import org.apache.flink.connectors.savepoint.functions.StateBootstrapFunction;
 import org.apache.flink.streaming.api.operators.AbstractUdfStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
+import org.apache.flink.util.FlinkRuntimeException;
 
 /**
  * A {@link org.apache.flink.streaming.api.operators.StreamOperator} for executing {@link
  * StateBootstrapFunction}'s.
  */
 @Internal
-public class StateBootstrapOperator<IN>
-	extends AbstractUdfStreamOperator<Void, StateBootstrapFunction<IN>>
+public class BroadcastStateBootstrapOperator<IN>
+	extends AbstractUdfStreamOperator<Void, BroadcastStateBootstrapFunction<IN>>
 	implements OneInputStreamOperator<IN, Void> {
 
 	private static final long serialVersionUID = 1L;
 
 	private ContextImpl context;
 
-	public StateBootstrapOperator(StateBootstrapFunction<IN> function) {
+	public BroadcastStateBootstrapOperator(BroadcastStateBootstrapFunction<IN> function) {
 		super(function);
 	}
 
@@ -54,7 +58,7 @@ public class StateBootstrapOperator<IN>
 		userFunction.processElement(element.getValue(), context);
 	}
 
-	private class ContextImpl implements StateBootstrapFunction.Context {
+	private class ContextImpl implements BroadcastStateBootstrapFunction.Context {
 		private final ProcessingTimeService processingTimeService;
 
 		private StreamRecord<IN> element;
@@ -66,6 +70,15 @@ public class StateBootstrapOperator<IN>
 		@Override
 		public long currentProcessingTime() {
 			return processingTimeService.getCurrentProcessingTime();
+		}
+
+		@Override
+		public <K, V> BroadcastState<K, V> getBroadcastState(MapStateDescriptor<K, V> descriptor) {
+			try {
+				return getOperatorStateBackend().getBroadcastState(descriptor);
+			} catch (Exception e) {
+				throw new FlinkRuntimeException(e);
+			}
 		}
 	}
 }

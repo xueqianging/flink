@@ -52,8 +52,8 @@ import java.util.Map;
 /**
  * An existing savepoint.
  */
-@SuppressWarnings("WeakerAccess")
 @PublicEvolving
+@SuppressWarnings("WeakerAccess")
 public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 	private final ExecutionEnvironment env;
 
@@ -291,10 +291,11 @@ public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 	public void write(String path) {
 		Path savepointPath = new Path(path);
 
-		SavepointMetadataProvider provider = new OnDiskSavepointMetadataProvider(path);
+		SavepointMetadataProvider provider = new OnDiskSavepointMetadataProvider(existingSavepoint);
 
 		DataSet<OperatorState> existingOperators = env.createInput(
-			new OperatorInputFormat(existingSavepoint, droppedOperators));
+			new OperatorInputFormat(existingSavepoint, droppedOperators)
+		).name(existingSavepoint);
 
 		write(savepointPath, transformations, stateBackend, provider, existingOperators);
 	}

@@ -24,8 +24,8 @@ import org.apache.flink.api.java.DataSet;
 /**
  * An OperatorTransformation represents a single operator within a {@link Savepoint}.
  */
-@SuppressWarnings("WeakerAccess")
 @PublicEvolving
+@SuppressWarnings("WeakerAccess")
 public abstract class OperatorTransformation {
 
 	/**

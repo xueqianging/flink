@@ -36,8 +36,7 @@ public final class OperatorStateInputSplit implements InputSplit {
 
 	private final int splitNum;
 
-	public OperatorStateInputSplit(
-		StateObjectCollection<OperatorStateHandle> managedOperatorState, int splitNum) {
+	public OperatorStateInputSplit(StateObjectCollection<OperatorStateHandle> managedOperatorState, int splitNum) {
 		this.managedOperatorState = Collections.singletonList(managedOperatorState);
 		this.splitNum = splitNum;
 	}
