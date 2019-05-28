@@ -24,7 +24,6 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.operators.MapPartitionOperator;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.connectors.savepoint.operators.BroadcastStateBootstrapOperator;
 import org.apache.flink.connectors.savepoint.output.BoundedOneInputStreamTaskRunner;
 import org.apache.flink.connectors.savepoint.output.TaggedOperatorSubtaskState;
@@ -34,7 +33,6 @@ import org.apache.flink.connectors.savepoint.output.partitioner.KeyGroupRangePar
 import org.apache.flink.connectors.savepoint.runtime.BoundedStreamConfig;
 import org.apache.flink.connectors.savepoint.runtime.OperatorIDGenerator;
 import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.StreamOperator;
@@ -97,7 +95,7 @@ public class BootstrapTransformation<T> {
 			config = new BoundedStreamConfig(keySerializer, keySelector);
 		}
 
-		StreamOperator<Tuple2<Integer, OperatorSubtaskState>> operator = factory.getOperator(
+		StreamOperator<TaggedOperatorSubtaskState> operator = factory.getOperator(
 			System.currentTimeMillis(),
 			savepointPath);
 

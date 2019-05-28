@@ -22,6 +22,7 @@ import org.apache.flink.connectors.savepoint.runtime.NeverFireProcessingTimeServ
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.Output;
+import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -29,6 +30,8 @@ import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.Preconditions;
+
+import java.util.Iterator;
 
 /**
  * A stream task that pulls elements from an {@link Iterable} instead of the network. After all
@@ -42,57 +45,54 @@ import org.apache.flink.util.Preconditions;
 class BoundedStreamTask<IN, OUT, OP extends OneInputStreamOperator<IN, OUT> & BoundedOperator>
 	extends StreamTask<OUT, OP> {
 
-	private final Iterable<IN> input;
+	private final Iterator<IN> input;
 
 	private final Collector<OUT> collector;
 
 	private final StreamRecord<IN> reuse;
-
-	private volatile boolean running;
 
 	BoundedStreamTask(
 		Environment environment,
 		Iterable<IN> input,
 		Collector<OUT> collector) {
 		super(environment, new NeverFireProcessingTimeService());
-		this.input = input;
+		this.input = input.iterator();
 		this.collector = collector;
 		this.reuse = new StreamRecord<>(null);
 	}
 
 	@Override
-	protected void init() {
+	protected void init() throws Exception {
 		Preconditions.checkState(
 			operatorChain.getAllOperators().length == 1,
 			"BoundedStreamTask's should only run a single operator");
 
-		running = true;
+		// re-initialize the operator with the correct collector.
+		StreamOperatorFactory<OUT> operatorFactory = configuration.getStreamOperatorFactory(getUserCodeClassLoader());
+		headOperator = operatorFactory.createStreamOperator(this, configuration, new CollectorWrapper<>(collector));
+		headOperator.initializeState();
+		headOperator.open();
 	}
 
 	@Override
-	protected void run() throws Exception {
-		headOperator.setup(this, configuration, new CollectorWrapper<>(collector));
-
-		for (IN value : input) {
-			if (!running) {
-				break;
-			}
-
-			reuse.replace(value);
+	protected void performDefaultAction(ActionContext context) throws Exception {
+		if (input.hasNext()) {
+			reuse.replace(input.next());
 			headOperator.setKeyContextElement1(reuse);
 			headOperator.processElement(reuse);
+		} else {
+			headOperator.endInput();
+			context.allActionsCompleted();
 		}
-
-		headOperator.endInput();
 	}
 
 	@Override
-	protected void cancelTask() {
-		running = false;
-	}
+	protected void cancelTask() {}
 
 	@Override
-	protected void cleanup() {}
+	protected void cleanup() throws Exception {
+		headOperator.close();
+	}
 
 	private static class CollectorWrapper<OUT> implements Output<StreamRecord<OUT>> {
 
