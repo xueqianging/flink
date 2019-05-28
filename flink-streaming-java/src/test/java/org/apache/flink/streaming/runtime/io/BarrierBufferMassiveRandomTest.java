@@ -27,7 +27,6 @@ import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGateListener;
 
 import org.junit.Test;
 
@@ -54,8 +53,8 @@ public class BarrierBufferMassiveRandomTest {
 		try {
 			ioMan = new IOManagerAsync();
 
-			networkBufferPool1 = new NetworkBufferPool(100, PAGE_SIZE);
-			networkBufferPool2 = new NetworkBufferPool(100, PAGE_SIZE);
+			networkBufferPool1 = new NetworkBufferPool(100, PAGE_SIZE, 1);
+			networkBufferPool2 = new NetworkBufferPool(100, PAGE_SIZE, 1);
 			BufferPool pool1 = networkBufferPool1.createBufferPool(100, 100);
 			BufferPool pool2 = networkBufferPool2.createBufferPool(100, 100);
 
@@ -130,7 +129,7 @@ public class BarrierBufferMassiveRandomTest {
 		}
 	}
 
-	private static class RandomGeneratingInputGate implements InputGate {
+	private static class RandomGeneratingInputGate extends InputGate {
 
 		private final int numberOfChannels;
 		private final BufferPool[] bufferPools;
@@ -151,6 +150,7 @@ public class BarrierBufferMassiveRandomTest {
 			this.bufferPools = bufferPools;
 			this.barrierGens = barrierGens;
 			this.owningTaskName = owningTaskName;
+			this.isAvailable = AVAILABLE;
 		}
 
 		@Override
@@ -199,11 +199,12 @@ public class BarrierBufferMassiveRandomTest {
 		public void sendTaskEvent(TaskEvent event) {}
 
 		@Override
-		public void registerListener(InputGateListener listener) {}
-
-		@Override
 		public int getPageSize() {
 			return PAGE_SIZE;
+		}
+
+		@Override
+		public void setup() {
 		}
 
 		@Override

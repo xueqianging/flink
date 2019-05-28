@@ -50,14 +50,11 @@ import org.apache.flink.runtime.filecache.FileCache;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
+import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.netty.PartitionProducerStateChecker;
-import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
-import org.apache.flink.runtime.io.network.partition.ResultPartitionMetrics;
-import org.apache.flink.runtime.io.network.partition.consumer.InputChannelMetrics;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGateMetrics;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -192,7 +189,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	/** Serialized version of the job specific execution configuration (see {@link ExecutionConfig}). */
 	private final SerializedValue<ExecutionConfig> serializedExecutionConfig;
 
-	private final ResultPartition[] producedPartitions;
+	private final ResultPartitionWriter[] producedPartitions;
 
 	private final SingleInputGate[] inputGates;
 
@@ -218,9 +215,6 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 
 	/** The cache for user-defined files that the invokable requires. */
 	private final FileCache fileCache;
-
-	/** The gateway to the network stack, which handles inputs and produced results. */
-	private final NetworkEnvironment network;
 
 	/** The service for kvState registration of this task. */
 	private final KvStateService kvStateService;
@@ -355,7 +349,6 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		this.blobService = Preconditions.checkNotNull(blobService);
 		this.libraryCache = Preconditions.checkNotNull(libraryCache);
 		this.fileCache = Preconditions.checkNotNull(fileCache);
-		this.network = Preconditions.checkNotNull(networkEnvironment);
 		this.kvStateService = Preconditions.checkNotNull(kvStateService);
 		this.taskManagerConfig = Preconditions.checkNotNull(taskManagerConfig);
 
@@ -368,52 +361,39 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 
 		final String taskNameWithSubtaskAndId = taskNameWithSubtask + " (" + executionId + ')';
 
-		// Produced intermediate result partitions
-		this.producedPartitions = new ResultPartition[resultPartitionDeploymentDescriptors.size()];
+		// add metrics for buffers
+		final MetricGroup buffersGroup = metrics.getIOMetricGroup().addGroup("buffers");
 
-		int counter = 0;
+		// similar to MetricUtils.instantiateNetworkMetrics() but inside this IOMetricGroup
+		final MetricGroup networkGroup = metrics.getIOMetricGroup().addGroup("Network");
+		final MetricGroup outputGroup = networkGroup.addGroup("Output");
+		final MetricGroup inputGroup = networkGroup.addGroup("Input");
 
-		for (ResultPartitionDeploymentDescriptor desc: resultPartitionDeploymentDescriptors) {
-			ResultPartitionID partitionId = new ResultPartitionID(desc.getPartitionId(), executionId);
+		// produced intermediate result partitions
+		this.producedPartitions = networkEnvironment.createResultPartitionWriters(
+			taskNameWithSubtaskAndId,
+			jobId,
+			executionId,
+			this,
+			resultPartitionConsumableNotifier,
+			resultPartitionDeploymentDescriptors,
+			outputGroup,
+			buffersGroup);
 
-			this.producedPartitions[counter] = new ResultPartition(
-				taskNameWithSubtaskAndId,
-				this,
-				jobId,
-				partitionId,
-				desc.getPartitionType(),
-				desc.getNumberOfSubpartitions(),
-				desc.getMaxParallelism(),
-				networkEnvironment.getResultPartitionManager(),
-				resultPartitionConsumableNotifier,
-				ioManager,
-				desc.sendScheduleOrUpdateConsumersMessage());
+		// consumed intermediate result partitions
+		this.inputGates = networkEnvironment.createInputGates(
+			taskNameWithSubtaskAndId,
+			jobId,
+			this,
+			inputGateDeploymentDescriptors,
+			metrics.getIOMetricGroup(),
+			inputGroup,
+			buffersGroup,
+			metrics.getIOMetricGroup().getNumBytesInCounter());
 
-			++counter;
-		}
-
-		// Consumed intermediate result partitions
-		this.inputGates = new SingleInputGate[inputGateDeploymentDescriptors.size()];
 		this.inputGatesById = new HashMap<>();
-
-		counter = 0;
-
-		InputChannelMetrics inputChannelMetrics = new InputChannelMetrics(metricGroup.getIOMetricGroup());
-		for (InputGateDeploymentDescriptor inputGateDeploymentDescriptor: inputGateDeploymentDescriptors) {
-			SingleInputGate gate = SingleInputGate.create(
-				taskNameWithSubtaskAndId,
-				jobId,
-				inputGateDeploymentDescriptor,
-				networkEnvironment,
-				taskEventDispatcher,
-				this,
-				inputChannelMetrics,
-				metricGroup.getIOMetricGroup().getNumBytesInCounter());
-
-			inputGates[counter] = gate;
-			inputGatesById.put(gate.getConsumedResultId(), gate);
-
-			++counter;
+		for (SingleInputGate inputGate : inputGates) {
+			inputGatesById.put(inputGate.getConsumedResultId(), inputGate);
 		}
 
 		invokableHasBeenCanceled = new AtomicBoolean(false);
@@ -452,14 +432,6 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 
 	public Configuration getTaskConfiguration() {
 		return this.taskConfiguration;
-	}
-
-	public SingleInputGate[] getAllInputGates() {
-		return inputGates;
-	}
-
-	public ResultPartition[] getProducedPartitions() {
-		return producedPartitions;
 	}
 
 	public SingleInputGate getInputGateById(IntermediateDataSetID id) {
@@ -623,32 +595,10 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 
 			LOG.info("Registering task at network: {}.", this);
 
-			network.registerTask(this);
+			setupPartionsAndGates(producedPartitions, inputGates);
 
-			for (ResultPartition partition : producedPartitions) {
+			for (ResultPartitionWriter partition : producedPartitions) {
 				taskEventDispatcher.registerPartition(partition.getPartitionId());
-			}
-
-			// add metrics for buffers
-			this.metrics.getIOMetricGroup().initializeBufferMetrics(this);
-
-			// register detailed network metrics, if configured
-			if (taskManagerConfig.getConfiguration().getBoolean(TaskManagerOptions.NETWORK_DETAILED_METRICS)) {
-				// similar to MetricUtils.instantiateNetworkMetrics() but inside this IOMetricGroup
-				MetricGroup networkGroup = this.metrics.getIOMetricGroup().addGroup("Network");
-				MetricGroup outputGroup = networkGroup.addGroup("Output");
-				MetricGroup inputGroup = networkGroup.addGroup("Input");
-
-				// output metrics
-				for (int i = 0; i < producedPartitions.length; i++) {
-					ResultPartitionMetrics.registerQueueLengthMetrics(
-						outputGroup.addGroup(i), producedPartitions[i]);
-				}
-
-				for (int i = 0; i < inputGates.length; i++) {
-					InputGateMetrics.registerQueueLengthMetrics(
-						inputGroup.addGroup(i), inputGates[i]);
-				}
 			}
 
 			// next, kick off the background copying of files for the distributed cache
@@ -737,7 +687,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 			// ----------------------------------------------------------------
 
 			// finish the produced partitions. if this fails, we consider the execution failed.
-			for (ResultPartition partition : producedPartitions) {
+			for (ResultPartitionWriter partition : producedPartitions) {
 				if (partition != null) {
 					partition.finish();
 				}
@@ -874,6 +824,19 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		}
 	}
 
+	@VisibleForTesting
+	public static void setupPartionsAndGates(
+		ResultPartitionWriter[] producedPartitions, InputGate[] inputGates) throws IOException {
+
+		for (ResultPartitionWriter partition : producedPartitions) {
+			partition.setup();
+		}
+
+		for (InputGate gate : inputGates) {
+			gate.setup();
+		}
+	}
+
 	/**
 	 * Releases network resources before task exits. We should also fail the partition to release if the task
 	 * has failed, is canceled, or is being canceled at the moment.
@@ -881,7 +844,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	private void releaseNetworkResources() {
 		LOG.debug("Release task {} network resources (state: {}).", taskNameWithSubtask, getExecutionState());
 
-		for (ResultPartition partition : producedPartitions) {
+		for (ResultPartitionWriter partition : producedPartitions) {
 			taskEventDispatcher.unregisterPartition(partition.getPartitionId());
 			if (isCanceledOrFailed()) {
 				partition.fail(getFailureCause());
@@ -896,7 +859,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	 * release partitions and gates. Another is from task thread during task exiting.
 	 */
 	private void closeNetworkResources() {
-		for (ResultPartition partition : producedPartitions) {
+		for (ResultPartitionWriter partition : producedPartitions) {
 			try {
 				partition.close();
 			} catch (Throwable t) {
