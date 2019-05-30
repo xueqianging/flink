@@ -94,8 +94,7 @@ public abstract class WritableSavepoint<F extends WritableSavepoint> {
 		String uid,
 		StateBackend stateBackend,
 		BootstrapTransformation operator,
-		SavepointMetadataProvider provider
-		) {
+		SavepointMetadataProvider provider) {
 
 		return operator
 			.getOperatorSubtaskStates(uid, stateBackend, provider, savepointPath)

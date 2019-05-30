@@ -28,7 +28,7 @@ import java.util.Objects;
  */
 @Internal
 @SuppressWarnings("WeakerAccess")
-public class TaggedOperatorSubtaskState {
+public final class TaggedOperatorSubtaskState {
 
 	public int index;
 

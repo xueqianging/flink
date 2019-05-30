@@ -19,6 +19,8 @@ import org.apache.flink.streaming.api.operators.StreamOperator;
 public final class SnapshotUtils {
 	static final long CHECKPOINT_ID = 0L;
 
+	private SnapshotUtils() {}
+
 	public static <OUT, OP extends StreamOperator<OUT>> TaggedOperatorSubtaskState snapshot(
 		OP operator,
 		int index,

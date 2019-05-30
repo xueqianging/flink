@@ -90,7 +90,7 @@ public class UnionStateInputFormatTest {
 		}
 
 		@Override
-		public void snapshotState(FunctionSnapshotContext context) throws Exception {}
+		public void snapshotState(FunctionSnapshotContext context) {}
 
 		@Override
 		public void initializeState(FunctionInitializationContext context) throws Exception {

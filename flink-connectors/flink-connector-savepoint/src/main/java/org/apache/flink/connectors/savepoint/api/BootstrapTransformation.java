@@ -44,8 +44,8 @@ import javax.annotation.Nullable;
  * Bootstrapped data that can be written into a {@code Savepoint}.
  * @param <T> The input type of the transformation.
  */
-@SuppressWarnings("WeakerAccess")
 @PublicEvolving
+@SuppressWarnings("WeakerAccess")
 public class BootstrapTransformation<T> {
 	private final DataSet<T> dataSet;
 
@@ -115,7 +115,7 @@ public class BootstrapTransformation<T> {
 			.mapPartition(operatorRunner)
 			.name(uid);
 
-		if (config.getStreamOperator(getClass().getClassLoader()) instanceof BroadcastStateBootstrapOperator) {
+		if (operator instanceof BroadcastStateBootstrapOperator) {
 			subtaskStates = subtaskStates.setParallelism(1);
 		}
 

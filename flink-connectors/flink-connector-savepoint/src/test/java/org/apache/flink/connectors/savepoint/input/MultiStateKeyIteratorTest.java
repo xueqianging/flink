@@ -53,7 +53,7 @@ public class MultiStateKeyIteratorTest {
 		descriptors.add(new ValueStateDescriptor<>("state-2", Types.INT));
 	}
 
-	private static AbstractKeyedStateBackend<Integer> createKeyedStateBackend() throws Exception {
+	private static AbstractKeyedStateBackend<Integer> createKeyedStateBackend() {
 		MockStateBackend backend = new MockStateBackend();
 
 		return backend.createKeyedStateBackend(

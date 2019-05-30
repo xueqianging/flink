@@ -24,7 +24,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimerService;
 
 /**
- * A function that processes keys from a restored operator
+ * A function that writes keyed state to a new operator.
  *
  * <p>For every element {@link #processElement(Object, Context)} is invoked. This can write data to
  * state and set timers.

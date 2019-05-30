@@ -272,7 +272,7 @@ public class KeyedStateInputFormatTest {
 		}
 
 		@Override
-		public void readKey(Integer key, KeyedStateReaderFunction.Context ctx, Collector<Integer> out) throws Exception {
+		public void readKey(Integer key, KeyedStateReaderFunction.Context ctx, Collector<Integer> out) {
 			Set<Long> timers = ctx.getEventTimeTimers();
 			Assert.assertEquals("Each key should have exactly one timer for key " + key, 1, timers.size());
 			out.collect(timers.iterator().next().intValue());

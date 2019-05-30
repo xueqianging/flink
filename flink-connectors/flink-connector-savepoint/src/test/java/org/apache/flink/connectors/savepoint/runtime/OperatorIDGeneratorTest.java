@@ -35,33 +35,33 @@ import java.util.stream.StreamSupport;
  * from uids exactly the same as the job graph generator.
  */
 public class OperatorIDGeneratorTest {
+	private static final String UID = "uid";
+
+	private static final String OPERATOR_NAME = "operator";
 
 	@Test
 	public void testOperatorIdMatchesUid() {
-		final String uid = "uid";
+		OperatorID expectedId = getOperatorID();
 
-		OperatorID expectedId = getOperatorID(uid);
-
-		OperatorID generatedId = OperatorIDGenerator.fromUid(uid);
+		OperatorID generatedId = OperatorIDGenerator.fromUid(UID);
 
 		Assert.assertEquals(expectedId, generatedId);
 	}
 
-	private static OperatorID getOperatorID(String uid) {
-		final String name = "operator";
+	private static OperatorID getOperatorID() {
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		env.setParallelism(1);
 
 		env
 			.fromElements(1, 2, 3)
-			.uid(uid).name(name)
+			.uid(UID).name(OPERATOR_NAME)
 			.disableChaining()
 			.addSink(new DiscardingSink<>());
 
 		JobGraph graph = env.getStreamGraph().getJobGraph(new JobID());
 		JobVertex vertex = StreamSupport.stream(graph.getVertices().spliterator(), false)
-			.filter(node -> node.getName().contains(name))
+			.filter(node -> node.getName().contains(OPERATOR_NAME))
 			.findFirst()
 			.orElseThrow(() -> new IllegalStateException("Unable to find vertex"));
 

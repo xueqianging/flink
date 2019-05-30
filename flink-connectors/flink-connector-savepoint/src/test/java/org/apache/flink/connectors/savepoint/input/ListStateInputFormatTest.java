@@ -93,7 +93,7 @@ public class ListStateInputFormatTest {
 		}
 
 		@Override
-		public void snapshotState(FunctionSnapshotContext context) throws Exception {
+		public void snapshotState(FunctionSnapshotContext context) {
 		}
 
 		@Override

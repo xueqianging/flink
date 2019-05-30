@@ -86,7 +86,7 @@ public class BroadcastStateInputFormatTest {
 	static class StatefulFunction extends BroadcastProcessFunction<Void, Integer, Void> {
 
 		@Override
-		public void processElement(Void value, ReadOnlyContext ctx, Collector<Void> out) throws Exception {}
+		public void processElement(Void value, ReadOnlyContext ctx, Collector<Void> out) {}
 
 		@Override
 		public void processBroadcastElement(Integer value, Context ctx, Collector<Void> out) throws Exception {

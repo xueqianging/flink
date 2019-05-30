@@ -30,7 +30,7 @@ import org.apache.flink.runtime.state.StateBackend;
 @PublicEvolving
 public final class Savepoint {
 
-	private Savepoint() { }
+	private Savepoint() {}
 
 	/**
 	 * Loads an existing savepoint. Useful if you want to query, modify, or extend
