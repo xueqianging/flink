@@ -18,16 +18,22 @@
 package org.apache.flink.state.api;
 
 import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.api.common.InvalidProgramException;
+import org.apache.flink.api.common.functions.InvalidTypesException;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.Utils;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
+import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.state.api.functions.KeyedStateReaderFunction;
 import org.apache.flink.state.api.input.BroadcastStateInputFormat;
+import org.apache.flink.state.api.input.KeyedStateInputFormat;
 import org.apache.flink.state.api.input.ListStateInputFormat;
 import org.apache.flink.state.api.input.UnionStateInputFormat;
 
@@ -167,5 +173,73 @@ public class ExistingSavepoint {
 		MapStateDescriptor<K, V> descriptor = new MapStateDescriptor<>(name, keySerializer, valueSerializer);
 		BroadcastStateInputFormat<K, V> inputFormat = new BroadcastStateInputFormat<>(existingSavepoint, uid, descriptor);
 		return env.createInput(inputFormat, new TupleTypeInfo<>(keyTypeInfo, valueTypeInfo));
+	}
+
+	/**
+	 * Read keyed state from an operator in a {@code Savepoint}.
+	 * @param uid The uid of the operator.
+	 * @param function The {@link KeyedStateReaderFunction} that is called for each key in state.
+	 * @param <K> The type of the key in state.
+	 * @param <OUT> The output type of the transform function.
+	 * @return A {@code DataSet} of objects read from keyed state.
+	 */
+	public <K, OUT> DataSet<OUT> readKeyedState(String uid, KeyedStateReaderFunction<K, OUT> function) {
+
+		TypeInformation<K> keyTypeInfo;
+		TypeInformation<OUT> outType;
+
+		try {
+			keyTypeInfo = TypeExtractor.createTypeInfo(
+				KeyedStateReaderFunction.class,
+				function.getClass(), 0, null, null);
+		} catch (InvalidTypesException e) {
+			throw new InvalidProgramException(
+				"The key type of the KeyedStateReaderFunction could not be automatically determined. Please use " +
+					"Savepoint#readKeyedState(String, KeyedStateReaderFunction, TypeInformation, TypeInformation) instead.", e);
+		}
+
+		try {
+			outType = TypeExtractor.getUnaryOperatorReturnType(
+				function,
+				KeyedStateReaderFunction.class,
+				0,
+				1,
+				TypeExtractor.NO_INDEX,
+				keyTypeInfo,
+				Utils.getCallLocationName(),
+				false);
+		} catch (InvalidTypesException e) {
+			throw new InvalidProgramException(
+				"The output type of the KeyedStateReaderFunction could not be automatically determined. Please use " +
+					"Savepoint#readKeyedState(String, KeyedStateReaderFunction, TypeInformation, TypeInformation) instead.", e);
+		}
+
+		return readKeyedState(uid, function, keyTypeInfo, outType);
+	}
+
+	/**
+	 * Read keyed state from an operator in a {@code Savepoint}.
+	 * @param uid The uid of the operator.
+	 * @param function The {@link KeyedStateReaderFunction} that is called for each key in state.
+	 * @param keyTypeInfo The type information of the key in state.
+	 * @param outTypeInfo The type information of the output of the transform reader function.
+	 * @param <K> The type of the key in state.
+	 * @param <OUT> The output type of the transform function.
+	 * @return A {@code DataSet} of objects read from keyed state.
+	 */
+	public <K, OUT> DataSet<OUT> readKeyedState(
+		String uid,
+		KeyedStateReaderFunction<K, OUT> function,
+		TypeInformation<K> keyTypeInfo,
+		TypeInformation<OUT> outTypeInfo) {
+
+		KeyedStateInputFormat<K, OUT> inputFormat = new KeyedStateInputFormat<>(
+			existingSavepoint,
+			uid,
+			stateBackend,
+			keyTypeInfo,
+			function);
+
+		return env.createInput(inputFormat, outTypeInfo);
 	}
 }
