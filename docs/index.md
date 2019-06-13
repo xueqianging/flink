@@ -23,25 +23,36 @@ specific language governing permissions and limitations
 under the License.
 -->
 
+Apache Flink is a framework and distributed processing engine for stateful computations over unbounded and bounded data streams. Flink has been designed to run in all common cluster environments, perform computations at in-memory speed and at any scale. Learn more about what Apache Flink is and see real world use-cases on our [website](https://flink.apache.org).
 
+## Try Apache Flink
 
-This documentation is for Apache Flink version {{ site.version_title }}. These pages were built at: {% build_time %}.
+People come to Apache Flink from different backgrounds and with different learning styles. Whether you prefer a more theoretical or a practical approach, we hope you’ll find this section helpful.
 
-Apache Flink is an open source platform for distributed stream and batch data processing. Flink’s core is a streaming dataflow engine that provides data distribution, communication, and fault tolerance for distributed computations over data streams. Flink builds batch processing on top of the streaming engine, overlaying native iteration support, managed memory, and program optimization.
+  * If you prefer to learn by doing, start with one of our quickstart guides.
+  * If you prefer to learn concepts step by step, start with our guide to main concepts.
 
-## First Steps
+### For Application Developers
 
-- **Concepts**: Start with the basic concepts of Flink's [Dataflow Programming Model](concepts/programming-model.html) and [Distributed Runtime Environment](concepts/runtime.html). This will help you understand other parts of the documentation, including the setup and programming guides. We recommend you read these sections first.
+If you prefer to learn by doing, and have experience developing in Java or Scala, check out our practical tutorials.
+Use Flink's Table Api and learn to build real time analytics pipelines to up to the moment insights.
+Afterwards, walk through the DataStream tutorial to see how to build stateful event-driven applications for detecting fraudulant transactions in a stream of credit card transactions.
 
-- **Tutorials**: 
-  * [Implement and run a DataStream application](./tutorials/datastream_api.html)
-  * [Setup a local Flink cluster](./tutorials/local_setup.html)
+### For DBAs
 
-- **Programming Guides**: You can read our guides about [basic API concepts](dev/api_concepts.html) and the [DataStream API](dev/datastream_api.html) or the [DataSet API](dev/batch/index.html) to learn how to write your first Flink programs.
+Look at this neat sql client docker thing
 
-## Deployment
+### For DevOps
 
-Before putting your Flink job into production, read the [Production Readiness Checklist](ops/production_ready.html).
+Plus we have a dockerized container to see what managing flink looks like in production just for you!
+
+## Learn Apache Flink
+
+High level overview of application docs
+
+## Deploy Apache Flink
+
+High level overview of deployment docs
 
 ## Release Notes
 
@@ -56,6 +67,6 @@ Release notes cover important changes between Flink versions. Please carefully r
 
 - **Flink Forward**: Talks from past conferences are available at the [Flink Forward](http://flink-forward.org/) website and on [YouTube](https://www.youtube.com/channel/UCY8_lgiZLZErZPF47a2hXMA). [Robust Stream Processing with Apache Flink](http://2016.flink-forward.org/kb_sessions/robust-stream-processing-with-apache-flink/) is a good place to start.
 
-- **Training**: The [training materials](https://training.ververica.com/) from data Artisans include slides, exercises, and sample solutions.
+- **Training**: The [training materials](https://training.ververica.com/) from Ververica include slides, exercises, and sample solutions.
 
 - **Blogs**: The [Apache Flink](https://flink.apache.org/blog/) and [Ververica](https://www.ververica.com/blog) blogs publish frequent, in-depth technical articles about Flink.

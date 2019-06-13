@@ -36,6 +36,8 @@ under the License.
 	<modules>
 		<module>flink-quickstart-java</module>
 		<module>flink-quickstart-scala</module>
+		<module>flink-quickstart-datastream-java</module>
+		<module>flink-quickstart-common</module>
 	</modules>
 	<build>
 		<extensions>
