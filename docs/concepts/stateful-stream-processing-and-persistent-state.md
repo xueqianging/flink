@@ -1,9 +1,8 @@
 ---
-title: "Project Build Setup"
-nav-id: projectsetup
-nav-title: 'Project Build Setup'
-nav-parent_id: dev
-nav-pos: 0
+title: "Stateful Stream Processing & Persistent State"
+nav-pos: 2
+nav-show_overview: true
+nav-parent_id: concepts
 ---
 <!--
 Licensed to the Apache Software Foundation (ASF) under one
@@ -23,3 +22,16 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 -->
+
+What is State?
+
+{:toc:}
+
+    * State in Stream & Batch Processing
+    * State Types (Keyed State, Broadcast State)
+    * State Persistence
+        * Asynchronous Barrier Snapshots
+        * Recovery
+        * State Backends (Working Data Structure vs Checkpoint Storage; not describing the existing backends though)
+    * Delivery Guarantees & “Exactly Once Semantics”
+        * End-to-end exactly once semantics

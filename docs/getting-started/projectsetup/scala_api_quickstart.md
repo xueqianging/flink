@@ -26,7 +26,6 @@ under the License.
 * This will be replaced by the TOC
 {:toc}
 
-
 ## Build Tools
 
 Flink projects can be built with different build tools.
