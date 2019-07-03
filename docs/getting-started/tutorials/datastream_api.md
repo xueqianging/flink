@@ -1,8 +1,9 @@
 ---
 title: "DataStream API Tutorial"
-nav-title: DataStream API
+nav-id: datastreamapitutorials
+nav-title: 'DataStream API Tutorial'
 nav-parent_id: apitutorials
-nav-pos: 10
+nav-pos: 2
 ---
 <!--
 Licensed to the Apache Software Foundation (ASF) under one
@@ -23,33 +24,46 @@ specific language governing permissions and limitations
 under the License.
 -->
 
+Apache Flink offers a DataStream API for building robust, stateful streaming applications. It provides fine-grained control over time and state, which can allow for the implementation of complex event-driven applications.
+
 * This will be replaced by the TOC
 {:toc}
 
-In this guide we will start from scratch and go from setting up a Flink project to running
-a streaming analysis program on a Flink cluster.
+## What Are We Building? 
 
-Wikipedia provides an IRC channel where all edits to the wiki are logged. We are going to
-read this channel in Flink and count the number of bytes that each user edits within
-a given window of time. This is easy enough to implement in a few minutes using Flink, but it will
-give you a good foundation from which to start building more complex analysis programs on your own.
+Credit card fraud is a growing concern in the digital age. One way criminals commit fraud is to get the card information of their victim and make a duplicate card. Then they test it by making one or more small purchases, often for a dollar or less. If it works, they then make more significant purchases to get items they can sell or keep for themselves.
 
-## Setting up a Maven Project
+In this tutorial, we'll show how to build a fraud detection system for detecting fraudulent credit card transactions. We will start by start by defining a simple set of rules and see how Flink allows us to implement advanced business logic and act in real time. 
 
-We are going to use a Flink Maven Archetype for creating our project structure. Please
-see [Java API Quickstart]({{ site.baseurl }}/dev/projectsetup/java_api_quickstart.html) for more details
-about this. For our purposes, the command to run is this:
+## Prerequisites
+
+We'll assume that you have some familiarity with Java or Scala, but you should be able to follow along even if you're coming from a different programming language.
+
+If you want to follow along, you will require a computer with: 
+
+* Java 8 
+* Maven 
+
+## Help, I’m Stuck! 
+
+If you get stuck, check out the [community support resources](https://flink.apache.org/community.html).
+In particular, Apache Flink's [user mailing](https://flink.apache.org/community.html#mailing-lists) list is consistently rated as one of the most active of any Apache project and a great way to get help quickly. 
+
+
+## How To Follow Along
+
+If you would like to follow along this walkthrough provides a Flink Maven Archetype to create a skeleton project with all the necessary dependencies quickly.
 
 {% highlight bash %}
 $ mvn archetype:generate \
     -DarchetypeGroupId=org.apache.flink \
-    -DarchetypeArtifactId=flink-quickstart-java \{% unless site.is_stable %}
+    -DarchetypeArtifactId=flink-walkthrough-datastream-java \{% unless site.is_stable %}
     -DarchetypeCatalog=https://repository.apache.org/content/repositories/snapshots/ \{% endunless %}
     -DarchetypeVersion={{ site.version }} \
-    -DgroupId=wiki-edits \
-    -DartifactId=wiki-edits \
+    -DgroupId=fraud-detection \
+    -DartifactId=fraud-detection \
     -Dversion=0.1 \
-    -Dpackage=wikiedits \
+    -Dpackage=frauddetection \
     -DinteractiveMode=false
 {% endhighlight %}
 
@@ -60,371 +74,550 @@ $ mvn archetype:generate \
 {% endunless %}
 
 You can edit the `groupId`, `artifactId` and `package` if you like. With the above parameters,
-Maven will create a project structure that looks like this:
+Maven will create a project with all the dependencies to complete this tutorial.
+After importing the project in your editor, you will see a file following code. 
 
-{% highlight bash %}
-$ tree wiki-edits
-wiki-edits/
-├── pom.xml
-└── src
-    └── main
-        ├── java
-        │   └── wikiedits
-        │       ├── BatchJob.java
-        │       └── StreamingJob.java
-        └── resources
-            └── log4j.properties
-{% endhighlight %}
-
-There is our `pom.xml` file that already has the Flink dependencies added in the root directory and
-several example Flink programs in `src/main/java`. We can delete the example programs, since
-we are going to start from scratch:
-
-{% highlight bash %}
-$ rm wiki-edits/src/main/java/wikiedits/*.java
-{% endhighlight %}
-
-As a last step we need to add the Flink Wikipedia connector as a dependency so that we can
-use it in our program. Edit the `dependencies` section of the `pom.xml` so that it looks like this:
-
-{% highlight xml %}
-<dependencies>
-    <dependency>
-        <groupId>org.apache.flink</groupId>
-        <artifactId>flink-java</artifactId>
-        <version>${flink.version}</version>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.flink</groupId>
-        <artifactId>flink-streaming-java_2.11</artifactId>
-        <version>${flink.version}</version>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.flink</groupId>
-        <artifactId>flink-clients_2.11</artifactId>
-        <version>${flink.version}</version>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.flink</groupId>
-        <artifactId>flink-connector-wikiedits_2.11</artifactId>
-        <version>${flink.version}</version>
-    </dependency>
-</dependencies>
-{% endhighlight %}
-
-Notice the `flink-connector-wikiedits_2.11` dependency that was added. (This example and
-the Wikipedia connector were inspired by the *Hello Samza* example of Apache Samza.)
-
-## Writing a Flink Program
-
-It's coding time. Fire up your favorite IDE and import the Maven project or open a text editor and
-create the file `src/main/java/wikiedits/WikipediaAnalysis.java`:
-
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
 {% highlight java %}
-package wikiedits;
+package frauddetection;
 
-public class WikipediaAnalysis {
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.quickstart.common.source.TransactionSource;
+
+public class FraudDetectionJob {
+
+    public static final double SMALL_AMOUNT = 0.01;
+
+    public static final double LARGE_AMOUNT = 500.00;
+
+    public static final long ONE_DAY = 24 * 60 * 60 * 1000;
 
     public static void main(String[] args) throws Exception {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
+        DataStream<Transaction> transactions = env
+            .addSource(new TransactionSource())
+            .name("transactions");
+        
+        DataStream<Alerts> alerts = transactions
+            .keyBy(Transaction::getAccountId)
+            .process(new FraudDetector())
+            .name("fraud-detector");
+
+        alerts
+            .addSink(new AlertSink())
+            .name("send-alerts");
+
+        env.execute("Fraud Detection");
+    }
+
+    public static class FraudDetector extends KeyedProcessFunction<Long, Transaction, Alert> {
+
+        @Override
+        public void processElement(Transaction transaction, Context context, Collector<Alert> collector) {
+            collector.collect(new Alert(transaction));
+        }
     }
 }
 {% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+package frauddetection
 
-The program is very basic now, but we will fill it in as we go. Note that I'll not give
-import statements here since IDEs can add them automatically. At the end of this section I'll show
-the complete code with import statements if you simply want to skip ahead and enter that in your
-editor.
+import org.apache.flink.streaming.scala.api.environment.StreamExecutionEnvironment
+import org.apache.flink.streaming.scala.api.datastream.DataStream
+import org.apache.flink.quickstart.common.source.TransactionSource
 
-The first step in a Flink program is to create a `StreamExecutionEnvironment`
-(or `ExecutionEnvironment` if you are writing a batch job). This can be used to set execution
-parameters and create sources for reading from external systems. So let's go ahead and add
-this to the main method:
+object FraudDetectionJob {
 
-{% highlight java %}
-StreamExecutionEnvironment see = StreamExecutionEnvironment.getExecutionEnvironment();
-{% endhighlight %}
+    val double SMALL_AMOUNT = 0.01
 
-Next we will create a source that reads from the Wikipedia IRC log:
+    val double LARGE_AMOUNT = 500.00
 
-{% highlight java %}
-DataStream<WikipediaEditEvent> edits = see.addSource(new WikipediaEditsSource());
-{% endhighlight %}
+    val long ONE_DAY = 24 * 60 * 60 * 1000
 
-This creates a `DataStream` of `WikipediaEditEvent` elements that we can further process. For
-the purposes of this example we are interested in determining the number of added or removed
-bytes that each user causes in a certain time window, let's say five seconds. For this we first
-have to specify that we want to key the stream on the user name, that is to say that operations
-on this stream should take the user name into account. In our case the summation of edited bytes in the windows
-should be per unique user. For keying a Stream we have to provide a `KeySelector`, like this:
+    def main(args: Array[String]): Unit = {
+        val env = StreamExecutionEnvironment.getExecutionEnvironment
 
-{% highlight java %}
-KeyedStream<WikipediaEditEvent, String> keyedEdits = edits
-    .keyBy(new KeySelector<WikipediaEditEvent, String>() {
+        val transactions = env
+            .addSource(new TransactionSource)
+            .name("transactions")
+        
+        val alerts = transactions
+            .keyBy(transaction => transaction.getAccountId)
+            .process(new FraudDetector)
+            .name("fraud-detector")
+
+        alerts
+            .addSink(new AlertSink)
+            .name("send-alerts");
+
+        env.execute("Fraud Detection")
+    }
+
+    class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
+
         @Override
-        public String getKey(WikipediaEditEvent event) {
-            return event.getUser();
+        public void processElement(transaction: Transaction, context: Context, collector: Collector[Alert]) {
+            collector.collect(new Alert(transaction))
         }
-    });
-{% endhighlight %}
-
-This gives us a Stream of `WikipediaEditEvent` that has a `String` key, the user name.
-We can now specify that we want to have windows imposed on this stream and compute a
-result based on elements in these windows. A window specifies a slice of a Stream
-on which to perform a computation. Windows are required when computing aggregations
-on an infinite stream of elements. In our example we will say
-that we want to aggregate the sum of edited bytes for every five seconds:
-
-{% highlight java %}
-DataStream<Tuple2<String, Long>> result = keyedEdits
-    .timeWindow(Time.seconds(5))
-    .aggregate(new AggregateFunction<WikipediaEditEvent, Tuple2<String, Long>, Tuple2<String, Long>>() {
-        @Override
-        public Tuple2<String, Long> createAccumulator() {
-            return new Tuple2<>("", 0L);
-        }
-
-        @Override
-        public Tuple2<String, Long> add(WikipediaEditEvent value, Tuple2<String, Long> accumulator) {
-            accumulator.f0 = value.getUser();
-            accumulator.f1 += value.getByteDiff();
-            return accumulator;
-        }
-
-        @Override
-        public Tuple2<String, Long> getResult(Tuple2<String, Long> accumulator) {
-            return accumulator;
-        }
-
-        @Override
-        public Tuple2<String, Long> merge(Tuple2<String, Long> a, Tuple2<String, Long> b) {
-            return new Tuple2<>(a.f0, a.f1 + b.f1);
-        }
-    });
-{% endhighlight %}
-
-The first call, `.timeWindow()`, specifies that we want to have tumbling (non-overlapping) windows
-of five seconds. The second call specifies a *Aggregate transformation* on each window slice for
-each unique key. In our case we start from an initial value of `("", 0L)` and add to it the byte
-difference of every edit in that time window for a user. The resulting Stream now contains
-a `Tuple2<String, Long>` for every user which gets emitted every five seconds.
-
-The only thing left to do is print the stream to the console and start execution:
-
-{% highlight java %}
-result.print();
-
-see.execute();
-{% endhighlight %}
-
-That last call is necessary to start the actual Flink job. All operations, such as creating
-sources, transformations and sinks only build up a graph of internal operations. Only when
-`execute()` is called is this graph of operations thrown on a cluster or executed on your local
-machine.
-
-The complete code so far is this:
-
-{% highlight java %}
-package wikiedits;
-
-import org.apache.flink.api.common.functions.AggregateFunction;
-import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.KeyedStream;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.connectors.wikiedits.WikipediaEditEvent;
-import org.apache.flink.streaming.connectors.wikiedits.WikipediaEditsSource;
-
-public class WikipediaAnalysis {
-
-  public static void main(String[] args) throws Exception {
-
-    StreamExecutionEnvironment see = StreamExecutionEnvironment.getExecutionEnvironment();
-
-    DataStream<WikipediaEditEvent> edits = see.addSource(new WikipediaEditsSource());
-
-    KeyedStream<WikipediaEditEvent, String> keyedEdits = edits
-      .keyBy(new KeySelector<WikipediaEditEvent, String>() {
-        @Override
-        public String getKey(WikipediaEditEvent event) {
-          return event.getUser();
-        }
-      });
-
-    DataStream<Tuple2<String, Long>> result = keyedEdits
-      .timeWindow(Time.seconds(5))
-      .aggregate(new AggregateFunction<WikipediaEditEvent, Tuple2<String, Long>, Tuple2<String, Long>>() {
-        @Override
-      	public Tuple2<String, Long> createAccumulator() {
-      	  return new Tuple2<>("", 0L);
-      	}
-
-      	@Override
-      	public Tuple2<String, Long> add(WikipediaEditEvent value, Tuple2<String, Long> accumulator) {
-      	  accumulator.f0 = value.getUser();
-      	  accumulator.f1 += value.getByteDiff();
-          return accumulator;
-      	}
-
-      	@Override
-      	public Tuple2<String, Long> getResult(Tuple2<String, Long> accumulator) {
-      	  return accumulator;
-      	}
-
-      	@Override
-      	public Tuple2<String, Long> merge(Tuple2<String, Long> a, Tuple2<String, Long> b) {
-      	  return new Tuple2<>(a.f0, a.f1 + b.f1);
-      	}
-      });
-
-    result.print();
-
-    see.execute();
-  }
+    }
 }
 {% endhighlight %}
+</div>
+</div>
 
-You can run this example in your IDE or on the command line, using Maven:
+Let's break down this code by component. 
 
-{% highlight bash %}
-$ mvn clean package
-$ mvn exec:java -Dexec.mainClass=wikiedits.WikipediaAnalysis
-{% endhighlight %}
+## Breaking Down The Code
 
-The first command builds our project and the second executes our main class. The output should be
-similar to this:
+#### The Execution Environment
 
-{% highlight bash %}
-1> (Fenix down,114)
-6> (AnomieBOT,155)
-8> (BD2412bot,-3690)
-7> (IgnorantArmies,49)
-3> (Ckh3111,69)
-5> (Slade360,0)
-7> (Narutolovehinata5,2195)
-6> (Vuyisa2001,79)
-4> (Ms Sarah Welch,269)
-4> (KasparBot,-245)
-{% endhighlight %}
+The first line sets up our `StreamExecutionEnvironment`.
+The execution environment is how we set properties for our deployments, specify whether we are writing a batch or streaming application, and create our sources.
+Here we have chosen to use the stream environment since we are building a streaming application.
 
-The number in front of each line tells you on which parallel instance of the print sink the output
-was produced.
-
-This should get you started with writing your own Flink programs. To learn more
-you can check out our guides
-about [basic concepts]({{ site.baseurl }}/dev/api_concepts.html) and the
-[DataStream API]({{ site.baseurl }}/dev/datastream_api.html). Stick
-around for the bonus exercise if you want to learn about setting up a Flink cluster on
-your own machine and writing results to [Kafka](http://kafka.apache.org).
-
-## Bonus Exercise: Running on a Cluster and Writing to Kafka
-
-Please follow our [local setup tutorial](local_setup.html) for setting up a Flink distribution
-on your machine and refer to the [Kafka quickstart](https://kafka.apache.org/0110/documentation.html#quickstart)
-for setting up a Kafka installation before we proceed.
-
-As a first step, we have to add the Flink Kafka connector as a dependency so that we can
-use the Kafka sink. Add this to the `pom.xml` file in the dependencies section:
-
-{% highlight xml %}
-<dependency>
-    <groupId>org.apache.flink</groupId>
-    <artifactId>flink-connector-kafka-0.11_2.11</artifactId>
-    <version>${flink.version}</version>
-</dependency>
-{% endhighlight %}
-
-Next, we need to modify our program. We'll remove the `print()` sink and instead use a
-Kafka sink. The new code looks like this:
-
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
 {% highlight java %}
+StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+val env = StreamExecutionEnvironment.getExecutionEnvironment()
+{% endhighlight %}
+</div>
+</div>
 
-result
-    .map(new MapFunction<Tuple2<String,Long>, String>() {
-        @Override
-        public String map(Tuple2<String, Long> tuple) {
-            return tuple.toString();
+#### Creating A Source
+
+Sources define connections to external systems that Flink can use to consume data. We are adding a source that produces an infinite stream of credit card transactions for us to process. 
+A transaction contains the account ID's (`accountId`), timestamps (`timestamp`) of when the sale occurred, and US$ amounts (`amount`). 
+The `name` attached to our source is just for debugging purposes, so if something goes wrong, we will know where the error originated.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+DataStream<Transaction> transactions = env
+    .addSource(new TransactionSource())
+    .name("transactions")
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+val transactions = env
+    .addSource(new TransactionSource)
+    .name("transactions")
+{% endhighlight %}
+</div>
+</div>
+
+#### Detecting Fraud
+
+Next, we partition our stream by the account id so that each transaction for a given account will be processed by an operator that will see every purchase for that account.
+This partitioned stream is what is processed by our `FraudDetector`.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+DataStream<Alerts> alerts = transactions
+    .keyBy(Transaction::getAccountId)
+    .process(new FraudDetector())
+    .name("fraud-detector");
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+val alerts = transactions
+    .keyBy(transaction => transaction.getAccountId)
+    .process(new FraudDetector)
+    .name("fraud-detector")
+{% endhighlight %}
+</div>
+</div>
+
+#### Outputting Results
+ 
+Sink's connect Flink jobs to external systems to output events.
+The `AlertSink` writes our results to standard output so we can easily see our results.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+alerts.addSink(new AlertSink());
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+alerts.addSink(new AlertSink)
+{% endhighlight %}
+</div>
+</div>
+
+#### Executing The Job
+
+Flink applications are built lazily shipped to the cluster for execution only once fully formed. 
+We call `StreamExecutionEnvironment#execute` to begin the execution of our job. 
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+env.execute("Fraud Detection");
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+env.execute("Fraud Detection")
+{% endhighlight %}
+</div>
+</div>
+
+
+## Writing An Initial Application 
+
+For our initial implementation, we will define fraud as an account that makes a small transaction followed by a significant transaction; where a small purchase is less than $0.10 immediately followed by a large purchase greater than $500.
+To do this, we must _remember_ information across events; a large transaction is only fraudulent if the previous amount was small.
+Remembering information across events requires `state` and so we will implement our `FraudDetector` using a `KeyedProcessFunction` which provides fine-grained control over state and time.
+
+What we would like is to be able to set a flag when a small transaction is processed; that way, when a large transaction comes through we can check our flag and determine if what we are seeing is fraud.
+The flag is what we want to store in state.
+
+The most basic type of state in Flink is defined using `ValueState`, a special data type that provides _fault tolerant_, _managed_, _per key_ state.
+They are defined by providing a `ValueStateDescriptor` which contains metadata about how the state should be managed.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+public static class FraudDetector extends KeyedProcessFunction<Long, Transaction, Alert> {
+
+    private transient ValueState<Boolean> flagState;
+
+    @Override
+    public void open(Configuration parameters) throws Exception {
+        ValueStateDescriptor<Boolean> descriptor = new ValueStateDescriptor<>(
+            "flag",
+            Types.BOOLEAN);
+
+        flagState = getRuntimeContext().getState(descriptor);
+    }
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
+
+    @transient var flagState: ValueState[Boolean] = _
+
+    override def open(parameters: Configuration): Unit = {
+        val descriptor = new ValueStateDescriptor("flag", Types.BOOLEAN)
+
+        flagState = getRuntimeContext.getState(descriptor)
+    }
+{% endhighlight %}
+</div>
+</div>
+
+`ValueState` is a wrapper class, similar to `AtomicReference` in the Java standard library.
+It provides three methods for interacting with its contents; `update` sets the current state, `value` gets the current value for the state, and `clear` to delete the current state.
+Otherwise, fault tolerance is managed automatically under the hood, and so you can interact with it like any standard variable.
+
+For our fraud detector, when an element arrives, we want to check and see if our flag is set. If it has and this transaction is larger than $500 we will output an alert. If the transaction is less than $0.10, we want to set the flag to true. Moreover, we always need to clear the flag after the first event after a small transaction.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+    @Override
+    public void processElement(
+        Transaction transaction,
+        Context context,
+        Collector<Alert> collector) throws Exception {
+
+        // Get the current state for the current key
+        Boolean lastTransactionWasSmall = flagState.value();
+
+        if (lastTransactionWasSmall) {
+            if (transaction.getAmount() > LARGE_AMOUNT) {
+                //Output an alert downstream
+                collector.collect(new Alert(transaction));
+            }
         }
-    })
-    .addSink(new FlinkKafkaProducer011<>("localhost:9092", "wiki-result", new SimpleStringSchema()));
-{% endhighlight %}
+        
+        // clean up our state
+        flagState.clear();
 
-The related classes also need to be imported:
+        if (transaction.getAmount() < SMALL_AMOUNT) {
+            // set the flag to true
+            flagState.update(true);
+        }
+    }
+}
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+    override def processElement(
+        transaction: Transaction,
+        context: Context,
+        collector: Collector[Alert]): Unit = {
+
+        // Get the current state for the current key
+        val lastTransactionWasSmall = flagState.value
+
+        if (lastTransactionWasSmall) {
+            if (transaction.getAmount() > LARGE_AMOUNT) {
+                //Output an alert downstream
+                collector.collect(new Alert(transaction))
+            }
+        }
+        
+        // clean up our state
+        flagState.clear()
+
+        if (transaction.getAmount() < SMALL_AMOUNT) {
+            // set the flag to true
+            flagState.update(true)
+        }
+    }
+}
+{% endhighlight %}
+</div>
+</div>
+## State + Time &#10084;&#65039; 
+
+Many event-driven applications require a strong notion of time to complement their state.
+For example, suppose we wanted to set a 24-hour timeout to our fraud detector.
+Flink allows setting timers which serve as callbacks at some point in time in the future.
+
+Along with the previous requirements, we will now add new features to our application.
+
+* Whenever the flag is set to true, also set a timer for 24 hours in the future.
+* When the timer fires, reset the flag by clearing its state
+* If the flag is ever cleared the timer should be canceled.
+
+To be able to cancel a timer, we have to remember what time it is set for, and remembering implies state, so we'll begin by creating a timer state along with our flag state.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
 {% highlight java %}
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer011;
-import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.api.common.functions.MapFunction;
+public static class FraudDetector extends KeyedProcessFunction<Long, Transaction, Alert> {
+
+    private transient ValueState<Boolean> flagState;
+
+    private transient ValueState<Long> timerState;
+
+    @Override
+    public void open(Configuration parameters) throws Exception {
+        ValueStateDescriptor<Boolean> flagDescriptor = new ValueStateDescriptor<>(
+            "flag",
+            Types.BOOLEAN);
+
+        flagState = getRuntimeContext().getState(descriptor);
+
+        ValueStateDescriptor<Long> timerDescriptor = new ValueStateDescriptor<>(
+            "timer-state",
+            Types.Long);
+
+        timerState = getRuntimeContext().getState(descriptor);
+    }
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
+
+    @transient var flagState: ValueState[Boolean] = _
+
+    @transient var timerState: ValueState[Long] = _
+
+    override def open(parameters: Configuration): Unit = {
+        val descriptor = new ValueStateDescriptor("flag", Types.BOOLEAN)
+
+        flagState = getRuntimeContext.getState(descriptor)
+
+        timerDescriptor = new ValueStateDescriptor(
+            "timer-state",
+            Types.Long)
+
+        timerState = getRuntimeContext().getState(descriptor)
+    }
+{% endhighlight %}
+</div>
+</div>
+
+`KeyedProcessFunction`'s all called with a `Context` that contains a timer service.
+The timer service allows us to query the current time, register timers, and delete timers.
+Using this, we can set a timer for 24 hours in the future every time the flag is set and store the timestamp in `timerState`.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+        } else if (transaction.getAmount() < SMALL_AMOUNT) {
+            state.update(true);
+
+            long timer = context.timerService().currentProcessingTime() + ONE_DAY;
+            context.timerService().registerProcessingTimeTimer(timer);
+
+            timerState.update(timer);
+        }
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+        } else if (transaction.getAmount() < SMALL_AMOUNT) {
+            state.update(true)
+
+            val timer = context.timerService().currentProcessingTime() + ONE_DAY
+            context.timerService().registerProcessingTimeTimer(timer)
+
+            timerState.update(timer)
+        }
+{% endhighlight %}
+</div>
+</div>
+
+When a timer fires, it calls `KeyedProcessFunction#onTimer`. 
+Overriding this method is how we can implement our callback to reset the flag.
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+    @Override
+    public void onTimer(long timestamp, OnTimerContext ctx, Collector<Alert> out) throws Exception {
+        timerState.clear();
+        flagState.clear();
+    }
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+    override def onTimer(timestamp: Long, ctx: OnTimerContext, out: Collector[Alert]): Unit = {
+        timerState.clear()
+        flagState.clear()
+    }
+{% endhighlight %}
+</div>
+</div>
+
+Finally, to cancel the timer, let's add a `cleanUpTimer` method that cancels the current timer and clears the timer state. This method can then be called at the beginning of `processElement`.
+
+{% highlight java %}
+    private void cleanUpTimer(OnTimerContext ctx) throws Exception {
+        Long timer = timerState.value();
+
+        if (timer != null) { 
+            context.timerService().deleteProcessingTimeTimer(timerState.value());
+            timerState.clear();
+        }
+    }
 {% endhighlight %}
 
-Note how we first transform the Stream of `Tuple2<String, Long>` to a Stream of `String` using
-a MapFunction. We are doing this because it is easier to write plain strings to Kafka. Then,
-we create a Kafka sink. You might have to adapt the hostname and port to your setup. `"wiki-result"`
-is the name of the Kafka stream that we are going to create next, before running our program.
-Build the project using Maven because we need the jar file for running on the cluster:
+And that's it, a fully functional, stateful, distributed streaming application!
 
-{% highlight bash %}
-$ mvn clean package
+## Final Application
+
+{% highlight java %}
+package frauddetection;
+
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
+import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
+import org.apache.flink.util.Collector;
+import org.apache.flink.walkthrough.common.entity.Alert;
+import org.apache.flink.walkthrough.common.entity.Transaction;
+import org.apache.flink.walkthrough.common.source.TransactionSource;
+
+public class FraudDetectionJob {
+
+    public static final double SMALL_AMOUNT = 0.10;
+
+    public static final double LARGE_AMOUNT = 500.00;
+
+    public static final long ONE_DAY = 24 * 60 * 60 * 1000;
+
+    public static void main(String[] args) throws Exception {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+        env
+                .addSource(new TransactionSource())
+                .name("transactions")
+                .keyBy(Transaction::getAccountId)
+                .process(new FraudDetector())
+                .name("fraud-detector")
+                .addSink(new AlertSink());
+
+        env.execute("Fraud Detection");
+    }
+
+    public static class FraudDetector extends KeyedProcessFunction<Long, Transaction, Alert> {
+
+        private transient ValueState<Boolean> flagState;
+
+        private transient ValueState<Long> timerState;
+
+        @Override
+        public void open(Configuration parameters) throws Exception {
+            ValueStateDescriptor<Boolean> flagDescriptor = new ValueStateDescriptor<>(
+                    "flag",
+                    Types.BOOLEAN);
+
+            flagState = getRuntimeContext().getState(flagDescriptor);
+
+            ValueStateDescriptor<Long> timerDescriptor = new ValueStateDescriptor<>(
+                    "timer-state",
+                    Types.LONG);
+
+            timerState = getRuntimeContext().getState(timerDescriptor);
+        }
+
+        @Override
+        public void processElement(
+                Transaction transaction,
+                Context context,
+                Collector<Alert> collector) throws Exception {
+            cleanUpTimer(context);
+
+            Boolean lastTransactionWasSmall = flagState.value();
+
+            if (lastTransactionWasSmall) {
+                if (transaction.getAmount() >= LARGE_AMOUNT) {
+                    collector.collect(new Alert(transaction));
+                }
+            }
+
+            flagState.clear();
+
+            if (transaction.getAmount() < SMALL_AMOUNT) {
+                flagState.update(true);
+
+                long timer = context.timerService().currentProcessingTime() + ONE_DAY;
+                context.timerService().registerProcessingTimeTimer(timer);
+
+                timerState.update(timer);
+            }
+        }
+
+        @Override
+        public void onTimer(long timestamp, OnTimerContext ctx, Collector<Alert> out) throws Exception {
+            timerState.clear();
+            flagState.clear();
+        }
+
+        private void cleanUpTimer(Context ctx) throws Exception {
+            Long timer = timerState.value();
+
+            if (timer != null) {
+                ctx.timerService().deleteProcessingTimeTimer(timerState.value());
+                timerState.clear();
+            }
+        }
+    }
+}
 {% endhighlight %}
-
-The resulting jar file will be in the `target` subfolder: `target/wiki-edits-0.1.jar`. We'll use
-this later.
-
-Now we are ready to launch a Flink cluster and run the program that writes to Kafka on it. Go
-to the location where you installed Flink and start a local cluster:
-
-{% highlight bash %}
-$ cd my/flink/directory
-$ bin/start-cluster.sh
-{% endhighlight %}
-
-We also have to create the Kafka Topic, so that our program can write to it:
-
-{% highlight bash %}
-$ cd my/kafka/directory
-$ bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic wiki-results
-{% endhighlight %}
-
-Now we are ready to run our jar file on the local Flink cluster:
-{% highlight bash %}
-$ cd my/flink/directory
-$ bin/flink run -c wikiedits.WikipediaAnalysis path/to/wikiedits-0.1.jar
-{% endhighlight %}
-
-The output of that command should look similar to this, if everything went according to plan:
-
-{% highlight plain %}
-03/08/2016 15:09:27 Job execution switched to status RUNNING.
-03/08/2016 15:09:27 Source: Custom Source(1/1) switched to SCHEDULED
-03/08/2016 15:09:27 Source: Custom Source(1/1) switched to DEPLOYING
-03/08/2016 15:09:27 Window(TumblingProcessingTimeWindows(5000), ProcessingTimeTrigger, AggregateFunction$3, PassThroughWindowFunction) -> Sink: Print to Std. Out (1/1) switched from CREATED to SCHEDULED
-03/08/2016 15:09:27 Window(TumblingProcessingTimeWindows(5000), ProcessingTimeTrigger, AggregateFunction$3, PassThroughWindowFunction) -> Sink: Print to Std. Out (1/1) switched from SCHEDULED to DEPLOYING
-03/08/2016 15:09:27 Window(TumblingProcessingTimeWindows(5000), ProcessingTimeTrigger, AggregateFunction$3, PassThroughWindowFunction) -> Sink: Print to Std. Out (1/1) switched from DEPLOYING to RUNNING
-03/08/2016 15:09:27 Source: Custom Source(1/1) switched to RUNNING
-{% endhighlight %}
-
-You can see how the individual operators start running. There are only two, because
-the operations after the window get folded into one operation for performance reasons. In Flink
-we call this *chaining*.
-
-You can observe the output of the program by inspecting the Kafka topic using the Kafka
-console consumer:
-
-{% highlight bash %}
-bin/kafka-console-consumer.sh  --zookeeper localhost:2181 --topic wiki-result
-{% endhighlight %}
-
-You can also check out the Flink dashboard which should be running at [http://localhost:8081](http://localhost:8081).
-You get an overview of your cluster resources and running jobs:
-
-<a href="{{ site.baseurl }}/page/img/quickstart-example/jobmanager-overview.png" ><img class="img-responsive" src="{{ site.baseurl }}/page/img/quickstart-example/jobmanager-overview.png" alt="JobManager Overview"/></a>
-
-If you click on your running job you will get a view where you can inspect individual operations
-and, for example, see the number of processed elements:
-
-<a href="{{ site.baseurl }}/page/img/quickstart-example/jobmanager-job.png" ><img class="img-responsive" src="{{ site.baseurl }}/page/img/quickstart-example/jobmanager-job.png" alt="Example Job View"/></a>
-
-This concludes our little tour of Flink. If you have any questions, please don't hesitate to ask on our [Mailing Lists](http://flink.apache.org/community.html#mailing-lists).
-
-{% top %}
