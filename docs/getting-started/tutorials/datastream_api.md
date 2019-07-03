@@ -553,6 +553,8 @@ Finally, to cancel the timer, let's add a `cleanUpTimer` method that cancels the
 </div>
 </div>
 
+## TODO - EVENT TIME SECTION HERE
+
 And that's it, a fully functional, stateful, distributed streaming application!
 
 ## Final Application
@@ -587,6 +589,7 @@ public class FraudDetectionJob {
 
         DataStream<Transaction> transactions = env
             .addSource(new TransactionSource())
+            .assignTimestampsAndWatermarks(new TransactionTimestampAssigner())
             .name("transactions");
         
         DataStream<Alerts> alerts = transactions
@@ -642,8 +645,8 @@ public class FraudDetectionJob {
             if (transaction.getAmount() < SMALL_AMOUNT) {
                 flagState.update(true);
 
-                long timer = context.timerService().currentProcessingTime() + ONE_DAY;
-                context.timerService().registerProcessingTimeTimer(timer);
+                long timer = transaction.getTimestamp() + ONE_DAY;
+                context.timerService().registerEventTimeTimer(timer);
 
                 timerState.update(timer);
             }
@@ -659,9 +662,17 @@ public class FraudDetectionJob {
             Long timer = timerState.value();
 
             if (timer != null) {
-                ctx.timerService().deleteProcessingTimeTimer(timerState.value());
+                ctx.timerService().deleteEventTimeTimer(timerState.value());
                 timerState.clear();
             }
+        }
+    }
+
+    public static class TransactionTimestampAssigner extends AscendingTimestampExtractor<Transaction> {
+
+        @Override
+        public long extractAscendingTimestamp(Transaction transaction) {
+            return transaction.getTimestamp();
         }
     }
 }
@@ -696,6 +707,7 @@ object FraudDetectionJob {
 
         val transactions = env
             .addSource(new TransactionSource)
+            .assignTimestampsAndWatermarks(new TransactionTimestampAssigner)
             .name("transactions")
         
         val alerts = transactions
@@ -749,8 +761,8 @@ object FraudDetectionJob {
             if (transaction.getAmount() < SMALL_AMOUNT) {
                 flagState.update(true)
 
-                long timer = context.timerService().currentProcessingTime() + ONE_DAY
-                context.timerService().registerProcessingTimeTimer(timer)
+                long timer = transaction.getTimestamp + ONE_DAY
+                context.timerService().registerEventTimeTimer(timer)
 
                 timerState.update(timer)
             }
@@ -765,12 +777,17 @@ object FraudDetectionJob {
             val timer = timerState.value
 
             if (timer != null) { 
-                context.timerService().deleteProcessingTimeTimer(timer)
+                context.timerService().deleteEventTimeTimer(timer)
                 timerState.clear
             }
         }
     }
 
+    class TransactionTimestampAssigner extends AscendingTimestampExtractor[Transaction] {
+        override def extractAscendingTimestamp(transaction: Transaction): Unit = {
+            return transaction.getTimestamp
+        }
+    }
 }
 {% endhighlight %}
 </div>
