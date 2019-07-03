@@ -82,9 +82,17 @@ After importing the project in your editor, you will see a file following code.
 {% highlight java %}
 package frauddetection;
 
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.quickstart.common.source.TransactionSource;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
+import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
+import org.apache.flink.util.Collector;
+import org.apache.flink.walkthrough.common.entity.Alert;
+import org.apache.flink.walkthrough.common.entity.Transaction;
+import org.apache.flink.walkthrough.common.source.TransactionSource;
 
 public class FraudDetectionJob {
 
@@ -116,7 +124,11 @@ public class FraudDetectionJob {
     public static class FraudDetector extends KeyedProcessFunction<Long, Transaction, Alert> {
 
         @Override
-        public void processElement(Transaction transaction, Context context, Collector<Alert> collector) {
+        public void processElement(
+            Transaction transaction,
+            Context context,
+            Collector<Alert> collector) throws Exception {
+  
             collector.collect(new Alert(transaction));
         }
     }
@@ -127,17 +139,25 @@ public class FraudDetectionJob {
 {% highlight scala %}
 package frauddetection
 
+import org.apache.flink.api.common.state.ValueState
+import org.apache.flink.api.common.state.ValueStateDescriptor
+import org.apache.flink.api.common.typeinfo.Types
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.scala.api.environment.StreamExecutionEnvironment
-import org.apache.flink.streaming.scala.api.datastream.DataStream
-import org.apache.flink.quickstart.common.source.TransactionSource
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction
+import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction
+import org.apache.flink.util.Collector
+import org.apache.flink.walkthrough.common.entity.Alert
+import org.apache.flink.walkthrough.common.entity.Transaction
+import org.apache.flink.walkthrough.common.source.TransactionSource
 
 object FraudDetectionJob {
 
-    val double SMALL_AMOUNT = 0.01
+    val SMALL_AMOUNT = 0.01
 
-    val double LARGE_AMOUNT = 500.00
+    val LARGE_AMOUNT = 500.00
 
-    val long ONE_DAY = 24 * 60 * 60 * 1000
+    val ONE_DAY = 24 * 60 * 60 * 1000
 
     def main(args: Array[String]): Unit = {
         val env = StreamExecutionEnvironment.getExecutionEnvironment
@@ -153,15 +173,18 @@ object FraudDetectionJob {
 
         alerts
             .addSink(new AlertSink)
-            .name("send-alerts");
+            .name("send-alerts")
 
         env.execute("Fraud Detection")
     }
 
     class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
 
-        @Override
-        public void processElement(transaction: Transaction, context: Context, collector: Collector[Alert]) {
+        override def processElement(
+            transaction: Transaction,
+            context: Context,
+            collector: Collector[Alert]): Unit = {
+
             collector.collect(new Alert(transaction))
         }
     }
@@ -188,7 +211,7 @@ StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironm
 </div>
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-val env = StreamExecutionEnvironment.getExecutionEnvironment()
+val env = StreamExecutionEnvironment.getExecutionEnvironment
 {% endhighlight %}
 </div>
 </div>
@@ -503,22 +526,39 @@ Overriding this method is how we can implement our callback to reset the flag.
 </div>
 
 Finally, to cancel the timer, let's add a `cleanUpTimer` method that cancels the current timer and clears the timer state. This method can then be called at the beginning of `processElement`.
-
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
 {% highlight java %}
-    private void cleanUpTimer(OnTimerContext ctx) throws Exception {
+    private void cleanUpTimer(Context ctx) throws Exception {
         Long timer = timerState.value();
 
         if (timer != null) { 
-            context.timerService().deleteProcessingTimeTimer(timerState.value());
+            context.timerService().deleteProcessingTimeTimer(timer);
             timerState.clear();
         }
     }
 {% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+    private def cleanUpTimer(ctx: Context): Unit = {
+        val timer = timerState.value
+
+        if (timer != null) { 
+            context.timerService().deleteProcessingTimeTimer(timer)
+            timerState.clear
+        }
+    }
+{% endhighlight %}
+</div>
+</div>
 
 And that's it, a fully functional, stateful, distributed streaming application!
 
 ## Final Application
 
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
 {% highlight java %}
 package frauddetection;
 
@@ -545,13 +585,18 @@ public class FraudDetectionJob {
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        env
-                .addSource(new TransactionSource())
-                .name("transactions")
-                .keyBy(Transaction::getAccountId)
-                .process(new FraudDetector())
-                .name("fraud-detector")
-                .addSink(new AlertSink());
+        DataStream<Transaction> transactions = env
+            .addSource(new TransactionSource())
+            .name("transactions");
+        
+        DataStream<Alerts> alerts = transactions
+            .keyBy(Transaction::getAccountId)
+            .process(new FraudDetector())
+            .name("fraud-detector");
+
+        alerts
+            .addSink(new AlertSink())
+            .name("send-alerts");
 
         env.execute("Fraud Detection");
     }
@@ -621,3 +666,112 @@ public class FraudDetectionJob {
     }
 }
 {% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+package frauddetection
+
+import org.apache.flink.api.common.state.ValueState
+import org.apache.flink.api.common.state.ValueStateDescriptor
+import org.apache.flink.api.common.typeinfo.Types
+import org.apache.flink.configuration.Configuration
+import org.apache.flink.streaming.scala.api.environment.StreamExecutionEnvironment
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction
+import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction
+import org.apache.flink.util.Collector
+import org.apache.flink.walkthrough.common.entity.Alert
+import org.apache.flink.walkthrough.common.entity.Transaction
+import org.apache.flink.walkthrough.common.source.TransactionSource
+
+object FraudDetectionJob {
+
+    val SMALL_AMOUNT = 0.01
+
+    val LARGE_AMOUNT = 500.00
+
+    val ONE_DAY = 24 * 60 * 60 * 1000
+
+    def main(args: Array[String]): Unit = {
+        val env = StreamExecutionEnvironment.getExecutionEnvironment
+
+        val transactions = env
+            .addSource(new TransactionSource)
+            .name("transactions")
+        
+        val alerts = transactions
+            .keyBy(transaction => transaction.getAccountId)
+            .process(new FraudDetector)
+            .name("fraud-detector")
+
+        alerts
+            .addSink(new AlertSink)
+            .name("send-alerts")
+
+        env.execute("Fraud Detection")
+    }
+
+    class FraudDetector extends KeyedProcessFunction[Long, Transaction, Alert] {
+
+        @transient var flagState: ValueState[Boolean] = _
+
+        @transient var timerState: ValueState[Long] = _
+
+        override def open(parameters: Configuration): Unit = {
+            val descriptor = new ValueStateDescriptor(
+                "flag",
+                Types.BOOLEAN)
+
+            flagState = getRuntimeContext.getState(descriptor)
+
+            timerDescriptor = new ValueStateDescriptor(
+                "timer-state",
+                Types.Long)
+
+            timerState = getRuntimeContext().getState(descriptor)
+        }
+
+        override def processElement(
+                transaction: Transaction,
+                context: Context,
+                collector: Collector[Alert]): Unit = {
+            cleanUpTimer(context)
+
+            val lastTransactionWasSmall = flagState.value
+
+            if (lastTransactionWasSmall) {
+                if (transaction.getAmount() >= LARGE_AMOUNT) {
+                    collector.collect(new Alert(transaction))
+                }
+            }
+
+            flagState.clear
+
+            if (transaction.getAmount() < SMALL_AMOUNT) {
+                flagState.update(true)
+
+                long timer = context.timerService().currentProcessingTime() + ONE_DAY
+                context.timerService().registerProcessingTimeTimer(timer)
+
+                timerState.update(timer)
+            }
+        }
+
+        override def onTimer(timestamp: Long, ctx: OnTimerContext, out: Collector[Alert]): Unit = {
+            timerState.clear()
+            flagState.clear()
+        }
+
+        private def cleanUpTimer(ctx: Context): Unit = {
+            val timer = timerState.value
+
+            if (timer != null) { 
+                context.timerService().deleteProcessingTimeTimer(timer)
+                timerState.clear
+            }
+        }
+    }
+
+}
+{% endhighlight %}
+</div>
+</div>
