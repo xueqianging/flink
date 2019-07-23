@@ -1,7 +1,7 @@
 ---
 title: "Project Template for Java"
 layout: redirect
-redirect: /dev/projectsetup/java_api_quickstart.html
+redirect: /getting-started/projectsetup/java_api_quickstart.html
 permalink: /quickstart/java_api_quickstart.html
 ---
 <!--

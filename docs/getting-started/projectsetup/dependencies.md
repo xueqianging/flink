@@ -57,8 +57,8 @@ As with most systems that run user-defined applications, there are two broad cat
 ## Setting up a Project: Basic Dependencies
 
 Every Flink application needs as the bare minimum the API dependencies, to develop against.
-For Maven, you can use the [Java Project Template]({{ site.baseurl }}/dev/projectsetup/java_api_quickstart.html)
-or [Scala Project Template]({{ site.baseurl }}/dev/projectsetup/scala_api_quickstart.html) to create
+For Maven, you can use the [Java Project Template]({{ site.baseurl }}/getting-started/projectsetup/java_api_quickstart.html)
+or [Scala Project Template]({{ site.baseurl }}/getting-started/projectsetup/scala_api_quickstart.html) to create
 a program skeleton with these initial dependencies.
 
 When setting up a project manually, you need to add the following dependencies for the Java/Scala API
@@ -136,8 +136,8 @@ We recommend to package the application code and all its required dependencies i
 we refer to as the *application jar*. The application jar can be submitted to an already running Flink cluster,
 or added to a Flink application container image.
 
-Projects created from the [Java Project Template]({{ site.baseurl }}/dev/projectsetup/java_api_quickstart.html) or
-[Scala Project Template]({{ site.baseurl }}/dev/projectsetup/scala_api_quickstart.html) are configured to automatically include
+Projects created from the [Java Project Template]({{ site.baseurl }}/getting-started/projectsetup/java_api_quickstart.html) or
+[Scala Project Template]({{ site.baseurl }}/getting-started/projectsetup/scala_api_quickstart.html) are configured to automatically include
 the application dependencies into the application jar when running `mvn clean package`. For projects that are
 not set up from those templates, we recommend to add the Maven Shade Plugin (as listed in the Appendix below)
 to build the application jar with all required dependencies.

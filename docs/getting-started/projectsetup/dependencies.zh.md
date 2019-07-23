@@ -47,8 +47,8 @@ under the License.
 ## 搭建一个项目: 基础依赖
 
 开发 Flink 应用程序需要最低限度的 API 依赖。Maven 用户，可以使用 
-[Java 项目模板]({{ site.baseurl }}/zh/dev/projectsetup/java_api_quickstart.html)或者
-[Scala 项目模板]({{ site.baseurl }}/zh/dev/projectsetup/scala_api_quickstart.html)来创建一个包含最初依赖的程序骨架。
+[Java 项目模板]({{ site.baseurl }}/zh/getting-started/projectsetup/java_api_quickstart.html)或者
+[Scala 项目模板]({{ site.baseurl }}/zh/getting-started/projectsetup/scala_api_quickstart.html)来创建一个包含最初依赖的程序骨架。
 
 手动设置项目时，需要为 Java 或 Scala API 添加以下依赖项（这里以 Maven 语法为例，但也适用于其他构建工具（Gradle、 SBT 等））。
 
@@ -115,8 +115,8 @@ under the License.
 我们建议将应用程序代码及其所有需要的依赖项打包到一个 *jar-with-dependencies* 的 jar 包中。
 这个打包好的应用 jar 可以提交到已经运行的 Flink 集群中，或者添加到 Flink 应用容器镜像中。
  
-通过[Java 项目模板]({{ site.baseurl }}/zh/dev/projectsetup/java_api_quickstart.html) 或者
-[Scala 项目模板]({{ site.baseurl }}/zh/dev/projectsetup/scala_api_quickstart.html) 创建的应用，
+通过[Java 项目模板]({{ site.baseurl }}/zh/getting-started/projectsetup/java_api_quickstart.html) 或者
+[Scala 项目模板]({{ site.baseurl }}/zh/getting-started/projectsetup/scala_api_quickstart.html) 创建的应用，
 当使用命令 `mvn clean package` 打包的时候会自动将应用依赖类库打包进应用 jar 包。
 对于不是通过上面模板创建的应用，我们推荐添加 Maven Shade Plugin 去构建应用。(下面的附录会给出具体配置)
 
