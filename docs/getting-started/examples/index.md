@@ -26,15 +26,134 @@ under the License.
 -->
 
 
-## Bundled Examples
 
-The Flink sources include many examples for Flink's different APIs:
+The Flink sources include many examples for Flink's different APIs, each example shows off something interesting. 
 
-* DataStream applications ({% gh_link flink-examples/flink-examples-streaming/src/main/java/org/apache/flink/streaming/examples "Java" %} / {% gh_link flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples "Scala" %}) 
-* DataSet applications ({% gh_link flink-examples/flink-examples-batch/src/main/java/org/apache/flink/examples/java "Java" %} / {% gh_link flink-examples/flink-examples-batch/src/main/scala/org/apache/flink/examples/scala "Scala" %})
-* Table API / SQL queries ({% gh_link flink-examples/flink-examples-table/src/main/java/org/apache/flink/table/examples/java "Java" %} / {% gh_link flink-examples/flink-examples-table/src/main/scala/org/apache/flink/table/examples/scala "Scala" %})
+* This will be replaced by the TOC
+{:toc}
 
-These [instructions]({{ site.baseurl }}/dev/batch/examples.html#running-an-example) explain how to run the examples.
+## Setup
+
+All examples require a running flink cluster. Here is a basic setup and links to more in depth setups. 
+
+## DataStream 
+
+<div class="row">
+  <div class="col-sm-4">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <b>Word Count</b>
+      </div>
+      <div class="panel-heading">
+        <b>Languages:</b> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/java/org/apache/flink/streaming/examples/wordcount/WordCount.java"><span class="label label-info">Java</span></a> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/wordcount/WordCount.scala"><span class="label label-danger">Scala</span></a>
+      </div>
+      <div class="panel-body">
+        <ul style="font-size: small;">
+          <li>Concept 1</li>
+          <li>Concept 2</li>
+          <li>Concept 3</li>   
+        </ul>
+      </div>
+    </div>
+  </div>
+    <div class="col-sm-4">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <b>Other Example</b>
+      </div>
+      <div class="panel-heading">
+        <b>Languages:</b> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/java/org/apache/flink/streaming/examples/wordcount/WordCount.java"><span class="label label-info">Java</span></a> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/wordcount/WordCount.scala"><span class="label label-danger">Scala</span></a>
+      </div>
+      <div class="panel-body">
+        <ul style="font-size: small;">
+          <li>Concept 1</li>
+          <li>Concept 2</li>
+          <li>Concept 3</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+## Table Api 
+
+<div class="row">
+  <div class="col-sm-4">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <b>Word Count</b>
+      </div>
+      <div class="panel-heading">
+        <b>Languages:</b> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/java/org/apache/flink/streaming/examples/wordcount/WordCount.java"><span class="label label-info">Java</span></a> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/wordcount/WordCount.scala"><span class="label label-danger">Scala</span></a>
+      </div>
+      <div class="panel-body">
+        <ul style="font-size: small;">
+          <li>Concept 1</li>
+          <li>Concept 2</li>
+          <li>Concept 3</li>  
+        </ul>
+      </div>
+    </div>
+  </div>
+    <div class="col-sm-4">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <b>Other Example</b>
+      </div>
+      <div class="panel-heading">
+        <b>Languages:</b> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/java/org/apache/flink/streaming/examples/wordcount/WordCount.java"><span class="label label-info">Java</span></a> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/wordcount/WordCount.scala"><span class="label label-danger">Scala</span></a>
+      </div>
+      <div class="panel-body">
+        <ul style="font-size: small;">
+          <li>Concept 1</li>
+          <li>Concept 2</li>
+          <li>Concept 3</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+## DataSet
+
+<div class="row">
+  <div class="col-sm-4">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <b>Word Count</b>
+      </div>
+      <div class="panel-heading">
+        <b>Languages:</b> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/java/org/apache/flink/streaming/examples/wordcount/WordCount.java"><span class="label label-info">Java</span></a> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/wordcount/WordCount.scala"><span class="label label-danger">Scala</span></a>
+      </div>
+      <div class="panel-body">
+        <ul style="font-size: small;">
+          <li>Concept 1</li>
+          <li>Concept 2</li>
+          <li>Concept 3</li>   
+        </ul>
+      </div>
+    </div>
+  </div>
+    <div class="col-sm-4">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <b>Other Example</b>
+      </div>
+      <div class="panel-heading">
+        <b>Languages:</b> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/java/org/apache/flink/streaming/examples/wordcount/WordCount.java"><span class="label label-info">Java</span></a> <a href="https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/wordcount/WordCount.scala"><span class="label label-danger">Scala</span></a>
+      </div>
+      <div class="panel-body">
+        <ul style="font-size: small;">
+          <li>Concept 1</li>
+          <li>Concept 2</li>
+          <li>Concept 3</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 ## Examples on the Web
 
