@@ -24,56 +24,27 @@ import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.common.functions.FoldFunction;
-import org.apache.flink.api.common.functions.Function;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.functions.RichFunction;
-import org.apache.flink.api.common.state.AggregatingStateDescriptor;
-import org.apache.flink.api.common.state.FoldingStateDescriptor;
-import org.apache.flink.api.common.state.ListStateDescriptor;
-import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.Utils;
-import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction;
 import org.apache.flink.streaming.api.functions.aggregation.ComparableAggregator;
 import org.apache.flink.streaming.api.functions.aggregation.SumAggregator;
-import org.apache.flink.streaming.api.functions.windowing.AggregateApplyWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.FoldApplyProcessWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.FoldApplyWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.PassThroughWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.ReduceApplyProcessWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.ReduceApplyWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
-import org.apache.flink.streaming.api.windowing.assigners.BaseAlignedWindowAssigner;
-import org.apache.flink.streaming.api.windowing.assigners.MergingWindowAssigner;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
 import org.apache.flink.streaming.api.windowing.evictors.Evictor;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.triggers.Trigger;
 import org.apache.flink.streaming.api.windowing.windows.Window;
-import org.apache.flink.streaming.runtime.operators.windowing.EvictingWindowOperator;
-import org.apache.flink.streaming.runtime.operators.windowing.WindowOperator;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalAggregateProcessWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableProcessWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueProcessWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalWindowFunction;
-import org.apache.flink.streaming.runtime.streamrecord.StreamElementSerializer;
-import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.streaming.runtime.operators.windowing.WindowOperatorBuilder;
 import org.apache.flink.util.OutputTag;
-import org.apache.flink.util.Preconditions;
 
-import javax.annotation.Nullable;
-
-import java.lang.reflect.Type;
-
-import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -104,30 +75,21 @@ public class WindowedStream<T, K, W extends Window> {
 	/** The keyed data stream that is windowed by this stream. */
 	private final KeyedStream<T, K> input;
 
-	/** The window assigner. */
-	private final WindowAssigner<? super T, W> windowAssigner;
-
-	/** The trigger that is used for window evaluation/emission. */
-	private Trigger<? super T, ? super W> trigger;
-
-	/** The evictor that is used for evicting elements before window evaluation. */
-	private Evictor<? super T, ? super W> evictor;
-
-	/** The user-specified allowed lateness. */
-	private long allowedLateness = 0L;
-
-	/**
-	 * Side output {@code OutputTag} for late data. If no tag is set late data will simply be
-	 * dropped.
- 	 */
-	private OutputTag<T> lateDataOutputTag;
+	private final WindowOperatorBuilder<T, K, W> builder;
 
 	@PublicEvolving
 	public WindowedStream(KeyedStream<T, K> input,
 			WindowAssigner<? super T, W> windowAssigner) {
 		this.input = input;
-		this.windowAssigner = windowAssigner;
-		this.trigger = windowAssigner.getDefaultTrigger(input.getExecutionEnvironment());
+
+		this.builder = new WindowOperatorBuilder<>(
+			windowAssigner,
+			windowAssigner.getDefaultTrigger(input.getExecutionEnvironment()),
+			input.getExecutionConfig(),
+			input.getType(),
+			input.getKeySelector(),
+			input.getKeyType()
+		);
 	}
 
 	/**
@@ -135,15 +97,7 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	@PublicEvolving
 	public WindowedStream<T, K, W> trigger(Trigger<? super T, ? super W> trigger) {
-		if (windowAssigner instanceof MergingWindowAssigner && !trigger.canMerge()) {
-			throw new UnsupportedOperationException("A merging window assigner cannot be used with a trigger that does not support merging.");
-		}
-
-		if (windowAssigner instanceof BaseAlignedWindowAssigner) {
-			throw new UnsupportedOperationException("Cannot use a " + windowAssigner.getClass().getSimpleName() + " with a custom trigger.");
-		}
-
-		this.trigger = trigger;
+		builder.trigger(trigger);
 		return this;
 	}
 
@@ -156,10 +110,7 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	@PublicEvolving
 	public WindowedStream<T, K, W> allowedLateness(Time lateness) {
-		final long millis = lateness.toMilliseconds();
-		checkArgument(millis >= 0, "The allowed lateness cannot be negative.");
-
-		this.allowedLateness = millis;
+		builder.allowedLateness(lateness);
 		return this;
 	}
 
@@ -175,8 +126,8 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	@PublicEvolving
 	public WindowedStream<T, K, W> sideOutputLateData(OutputTag<T> outputTag) {
-		Preconditions.checkNotNull(outputTag, "Side output tag must not be null.");
-		this.lateDataOutputTag = input.getExecutionEnvironment().clean(outputTag);
+		outputTag = input.getExecutionEnvironment().clean(outputTag);
+		builder.sideOutputLateData(outputTag);
 		return this;
 	}
 
@@ -188,10 +139,7 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	@PublicEvolving
 	public WindowedStream<T, K, W> evictor(Evictor<? super T, ? super W> evictor) {
-		if (windowAssigner instanceof BaseAlignedWindowAssigner) {
-			throw new UnsupportedOperationException("Cannot use a " + windowAssigner.getClass().getSimpleName() + " with an Evictor.");
-		}
-		this.evictor = evictor;
+		builder.evictor(evictor);
 		return this;
 	}
 
@@ -224,7 +172,7 @@ public class WindowedStream<T, K, W extends Window> {
 
 		//clean the closure
 		function = input.getExecutionEnvironment().clean(function);
-		return reduce(function, new PassThroughWindowFunction<K, W, T>());
+		return reduce(function, new PassThroughWindowFunction<>());
 	}
 
 	/**
@@ -264,56 +212,13 @@ public class WindowedStream<T, K, W extends Window> {
 			WindowFunction<T, R, K, W> function,
 			TypeInformation<R> resultType) {
 
-		if (reduceFunction instanceof RichFunction) {
-			throw new UnsupportedOperationException("ReduceFunction of reduce can not be a RichFunction.");
-		}
-
 		//clean the closures
 		function = input.getExecutionEnvironment().clean(function);
 		reduceFunction = input.getExecutionEnvironment().clean(reduceFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, reduceFunction, function);
-		KeySelector<T, K> keySel = input.getKeySelector();
+		final String opName = builder.generateOperatorName(reduceFunction, function);
 
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-				(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-				new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator =
-				new EvictingWindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalIterableWindowFunction<>(new ReduceApplyWindowFunction<>(reduceFunction, function)),
-					trigger,
-					evictor,
-					allowedLateness,
-					lateDataOutputTag);
-
-		} else {
-			ReducingStateDescriptor<T> stateDesc = new ReducingStateDescriptor<>("window-contents",
-				reduceFunction,
-				input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator =
-				new WindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalSingleValueWindowFunction<>(function),
-					trigger,
-					allowedLateness,
-					lateDataOutputTag);
-		}
-
+		OneInputStreamOperator<T, R> operator = builder.reduce(reduceFunction, function);
 		return input.transform(opName, resultType, operator);
 	}
 
@@ -351,54 +256,12 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	@Internal
 	public <R> SingleOutputStreamOperator<R> reduce(ReduceFunction<T> reduceFunction, ProcessWindowFunction<T, R, K, W> function, TypeInformation<R> resultType) {
-		if (reduceFunction instanceof RichFunction) {
-			throw new UnsupportedOperationException("ReduceFunction of apply can not be a RichFunction.");
-		}
 		//clean the closures
 		function = input.getExecutionEnvironment().clean(function);
 		reduceFunction = input.getExecutionEnvironment().clean(reduceFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, reduceFunction, function);
-		KeySelector<T, K> keySel = input.getKeySelector();
-
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-					(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-					new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator =
-					new EvictingWindowOperator<>(windowAssigner,
-							windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-							keySel,
-							input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-							stateDesc,
-							new InternalIterableProcessWindowFunction<>(new ReduceApplyProcessWindowFunction<>(reduceFunction, function)),
-							trigger,
-							evictor,
-							allowedLateness,
-							lateDataOutputTag);
-
-		} else {
-			ReducingStateDescriptor<T> stateDesc = new ReducingStateDescriptor<>("window-contents",
-					reduceFunction,
-					input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator =
-					new WindowOperator<>(windowAssigner,
-							windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-							keySel,
-							input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-							stateDesc,
-							new InternalSingleValueProcessWindowFunction<>(function),
-							trigger,
-							allowedLateness,
-							lateDataOutputTag);
-		}
+		final String opName = builder.generateOperatorName(reduceFunction, function);
+		OneInputStreamOperator<T, R> operator = builder.reduce(reduceFunction, function);
 
 		return input.transform(opName, resultType, operator);
 	}
@@ -447,7 +310,7 @@ public class WindowedStream<T, K, W extends Window> {
 				"Please use fold(FoldFunction, WindowFunction) instead.");
 		}
 
-		return fold(initialValue, function, new PassThroughWindowFunction<K, W, R>(), resultType, resultType);
+		return fold(initialValue, function, new PassThroughWindowFunction<>(), resultType, resultType);
 	}
 
 	/**
@@ -499,60 +362,13 @@ public class WindowedStream<T, K, W extends Window> {
 			WindowFunction<ACC, R, K, W> function,
 			TypeInformation<ACC> foldAccumulatorType,
 			TypeInformation<R> resultType) {
-		if (foldFunction instanceof RichFunction) {
-			throw new UnsupportedOperationException("FoldFunction of fold can not be a RichFunction.");
-		}
-		if (windowAssigner instanceof MergingWindowAssigner) {
-			throw new UnsupportedOperationException("Fold cannot be used with a merging WindowAssigner.");
-		}
-
-		if (windowAssigner instanceof BaseAlignedWindowAssigner) {
-			throw new UnsupportedOperationException("Fold cannot be used with a " +
-				windowAssigner.getClass().getSimpleName() + " assigner.");
-		}
-
 		//clean the closures
 		function = input.getExecutionEnvironment().clean(function);
 		foldFunction = input.getExecutionEnvironment().clean(foldFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, foldFunction, function);
-		KeySelector<T, K> keySel = input.getKeySelector();
+		final String opName = builder.generateOperatorName(foldFunction, function);
 
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-				(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-				new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator = new EvictingWindowOperator<>(windowAssigner,
-				windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-				keySel,
-				input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-				stateDesc,
-				new InternalIterableWindowFunction<>(new FoldApplyWindowFunction<>(initialValue, foldFunction, function, foldAccumulatorType)),
-				trigger,
-				evictor,
-				allowedLateness,
-				lateDataOutputTag);
-
-		} else {
-			FoldingStateDescriptor<T, ACC> stateDesc = new FoldingStateDescriptor<>("window-contents",
-				initialValue, foldFunction, foldAccumulatorType.createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator = new WindowOperator<>(windowAssigner,
-				windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-				keySel,
-				input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-				stateDesc,
-				new InternalSingleValueWindowFunction<>(function),
-				trigger,
-				allowedLateness,
-				lateDataOutputTag);
-		}
+		OneInputStreamOperator<T, R> operator = builder.fold(initialValue, foldFunction, function, foldAccumulatorType);
 
 		return input.transform(opName, resultType, operator);
 	}
@@ -611,59 +427,13 @@ public class WindowedStream<T, K, W extends Window> {
 			ProcessWindowFunction<ACC, R, K, W> windowFunction,
 			TypeInformation<ACC> foldResultType,
 			TypeInformation<R> windowResultType) {
-		if (foldFunction instanceof RichFunction) {
-			throw new UnsupportedOperationException("FoldFunction can not be a RichFunction.");
-		}
-		if (windowAssigner instanceof MergingWindowAssigner) {
-			throw new UnsupportedOperationException("Fold cannot be used with a merging WindowAssigner.");
-		}
-
 		//clean the closures
 		windowFunction = input.getExecutionEnvironment().clean(windowFunction);
 		foldFunction = input.getExecutionEnvironment().clean(foldFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, foldFunction, windowFunction);
-		KeySelector<T, K> keySel = input.getKeySelector();
+		final String opName = builder.generateOperatorName(foldFunction, windowFunction);
 
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-					(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-					new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator =
-					new EvictingWindowOperator<>(windowAssigner,
-							windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-							keySel,
-							input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-							stateDesc,
-							new InternalIterableProcessWindowFunction<>(new FoldApplyProcessWindowFunction<>(initialValue, foldFunction, windowFunction, foldResultType)),
-							trigger,
-							evictor,
-							allowedLateness,
-							lateDataOutputTag);
-
-		} else {
-			FoldingStateDescriptor<T, ACC> stateDesc = new FoldingStateDescriptor<>("window-contents",
-					initialValue,
-					foldFunction,
-					foldResultType.createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator =
-					new WindowOperator<>(windowAssigner,
-							windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-							keySel,
-							input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-							stateDesc,
-							new InternalSingleValueProcessWindowFunction<>(windowFunction),
-							trigger,
-							allowedLateness,
-							lateDataOutputTag);
-		}
+		OneInputStreamOperator<T, R> operator = builder.fold(initialValue, foldFunction, windowFunction, foldResultType);
 
 		return input.transform(opName, windowResultType, operator);
 	}
@@ -727,7 +497,7 @@ public class WindowedStream<T, K, W extends Window> {
 			throw new UnsupportedOperationException("This aggregation function cannot be a RichFunction.");
 		}
 
-		return aggregate(function, new PassThroughWindowFunction<K, W, R>(),
+		return aggregate(function, new PassThroughWindowFunction<>(),
 			accumulatorType, resultType);
 	}
 
@@ -808,44 +578,9 @@ public class WindowedStream<T, K, W extends Window> {
 		windowFunction = input.getExecutionEnvironment().clean(windowFunction);
 		aggregateFunction = input.getExecutionEnvironment().clean(aggregateFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, aggregateFunction, windowFunction);
-		KeySelector<T, K> keySel = input.getKeySelector();
+		final String opName = builder.generateOperatorName(aggregateFunction, windowFunction);
 
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-					(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-					new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator = new EvictingWindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalIterableWindowFunction<>(new AggregateApplyWindowFunction<>(aggregateFunction, windowFunction)),
-					trigger,
-					evictor,
-					allowedLateness,
-					lateDataOutputTag);
-
-		} else {
-			AggregatingStateDescriptor<T, ACC, V> stateDesc = new AggregatingStateDescriptor<>("window-contents",
-					aggregateFunction, accumulatorType.createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator = new WindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalSingleValueWindowFunction<>(windowFunction),
-					trigger,
-					allowedLateness,
-					lateDataOutputTag);
-		}
+		OneInputStreamOperator<T, R> operator = builder.aggregate(aggregateFunction, windowFunction, accumulatorType);
 
 		return input.transform(opName, resultType, operator);
 	}
@@ -958,44 +693,9 @@ public class WindowedStream<T, K, W extends Window> {
 		windowFunction = input.getExecutionEnvironment().clean(windowFunction);
 		aggregateFunction = input.getExecutionEnvironment().clean(aggregateFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, aggregateFunction, windowFunction);
-		KeySelector<T, K> keySel = input.getKeySelector();
+		final String opName = builder.generateOperatorName(aggregateFunction, windowFunction);
 
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-					(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-					new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator = new EvictingWindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalAggregateProcessWindowFunction<>(aggregateFunction, windowFunction),
-					trigger,
-					evictor,
-					allowedLateness,
-					lateDataOutputTag);
-
-		} else {
-			AggregatingStateDescriptor<T, ACC, V> stateDesc = new AggregatingStateDescriptor<>("window-contents",
-					aggregateFunction, accumulatorType.createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator = new WindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalSingleValueProcessWindowFunction<>(windowFunction),
-					trigger,
-					allowedLateness,
-					lateDataOutputTag);
-		}
+		OneInputStreamOperator<T, R> operator = builder.aggregate(aggregateFunction, windowFunction, accumulatorType);
 
 		return input.transform(opName, resultType, operator);
 	}
@@ -1035,7 +735,11 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	public <R> SingleOutputStreamOperator<R> apply(WindowFunction<T, R, K, W> function, TypeInformation<R> resultType) {
 		function = input.getExecutionEnvironment().clean(function);
-		return apply(new InternalIterableWindowFunction<>(function), resultType, function);
+
+		final String opName = builder.generateOperatorName(function, null);
+		OneInputStreamOperator<T, R> operator = builder.apply(function);
+
+		return input.transform(opName, resultType, operator);
 	}
 
 	/**
@@ -1071,51 +775,10 @@ public class WindowedStream<T, K, W extends Window> {
 	@Internal
 	public <R> SingleOutputStreamOperator<R> process(ProcessWindowFunction<T, R, K, W> function, TypeInformation<R> resultType) {
 		function = input.getExecutionEnvironment().clean(function);
-		return apply(new InternalIterableProcessWindowFunction<>(function), resultType, function);
-	}
 
-	private <R> SingleOutputStreamOperator<R> apply(InternalWindowFunction<Iterable<T>, R, K, W> function, TypeInformation<R> resultType, Function originalFunction) {
+		final String opName = builder.generateOperatorName(function, null);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, originalFunction, null);
-		KeySelector<T, K> keySel = input.getKeySelector();
-
-		WindowOperator<K, T, Iterable<T>, R, W> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-					(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-					new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator =
-				new EvictingWindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					function,
-					trigger,
-					evictor,
-					allowedLateness,
-					lateDataOutputTag);
-
-		} else {
-			ListStateDescriptor<T> stateDesc = new ListStateDescriptor<>("window-contents",
-				input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator =
-				new WindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					function,
-					trigger,
-					allowedLateness,
-					lateDataOutputTag);
-		}
+		OneInputStreamOperator<T, R> operator = builder.process(function);
 
 		return input.transform(opName, resultType, operator);
 	}
@@ -1157,55 +820,13 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	@Deprecated
 	public <R> SingleOutputStreamOperator<R> apply(ReduceFunction<T> reduceFunction, WindowFunction<T, R, K, W> function, TypeInformation<R> resultType) {
-		if (reduceFunction instanceof RichFunction) {
-			throw new UnsupportedOperationException("ReduceFunction of apply can not be a RichFunction.");
-		}
-
 		//clean the closures
 		function = input.getExecutionEnvironment().clean(function);
 		reduceFunction = input.getExecutionEnvironment().clean(reduceFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, reduceFunction, function);
-		KeySelector<T, K> keySel = input.getKeySelector();
+		final String opName = builder.generateOperatorName(reduceFunction, function);
 
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-					(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-					new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator =
-				new EvictingWindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalIterableWindowFunction<>(new ReduceApplyWindowFunction<>(reduceFunction, function)),
-					trigger,
-					evictor,
-					allowedLateness,
-					lateDataOutputTag);
-
-		} else {
-			ReducingStateDescriptor<T> stateDesc = new ReducingStateDescriptor<>("window-contents",
-				reduceFunction,
-				input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator =
-				new WindowOperator<>(windowAssigner,
-					windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-					keySel,
-					input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-					stateDesc,
-					new InternalSingleValueWindowFunction<>(function),
-					trigger,
-					allowedLateness,
-					lateDataOutputTag);
-		}
+		OneInputStreamOperator<T, R> operator = builder.reduce(reduceFunction, function);
 
 		return input.transform(opName, resultType, operator);
 	}
@@ -1250,91 +871,15 @@ public class WindowedStream<T, K, W extends Window> {
 	 */
 	@Deprecated
 	public <R> SingleOutputStreamOperator<R> apply(R initialValue, FoldFunction<T, R> foldFunction, WindowFunction<R, R, K, W> function, TypeInformation<R> resultType) {
-		if (foldFunction instanceof RichFunction) {
-			throw new UnsupportedOperationException("FoldFunction of apply can not be a RichFunction.");
-		}
-		if (windowAssigner instanceof MergingWindowAssigner) {
-			throw new UnsupportedOperationException("Fold cannot be used with a merging WindowAssigner.");
-		}
-
 		//clean the closures
 		function = input.getExecutionEnvironment().clean(function);
 		foldFunction = input.getExecutionEnvironment().clean(foldFunction);
 
-		final String opName = generateOperatorName(windowAssigner, trigger, evictor, foldFunction, function);
-		KeySelector<T, K> keySel = input.getKeySelector();
+		final String opName = builder.generateOperatorName(foldFunction, function);
 
-		OneInputStreamOperator<T, R> operator;
-
-		if (evictor != null) {
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			TypeSerializer<StreamRecord<T>> streamRecordSerializer =
-					(TypeSerializer<StreamRecord<T>>) new StreamElementSerializer(input.getType().createSerializer(getExecutionEnvironment().getConfig()));
-
-			ListStateDescriptor<StreamRecord<T>> stateDesc =
-					new ListStateDescriptor<>("window-contents", streamRecordSerializer);
-
-			operator = new EvictingWindowOperator<>(windowAssigner,
-				windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-				keySel,
-				input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-				stateDesc,
-				new InternalIterableWindowFunction<>(new FoldApplyWindowFunction<>(initialValue, foldFunction, function, resultType)),
-				trigger,
-				evictor,
-				allowedLateness,
-				lateDataOutputTag);
-
-		} else {
-			FoldingStateDescriptor<T, R> stateDesc = new FoldingStateDescriptor<>("window-contents",
-				initialValue, foldFunction, resultType.createSerializer(getExecutionEnvironment().getConfig()));
-
-			operator = new WindowOperator<>(windowAssigner,
-				windowAssigner.getWindowSerializer(getExecutionEnvironment().getConfig()),
-				keySel,
-				input.getKeyType().createSerializer(getExecutionEnvironment().getConfig()),
-				stateDesc,
-				new InternalSingleValueWindowFunction<>(function),
-				trigger,
-				allowedLateness,
-				lateDataOutputTag);
-		}
+		OneInputStreamOperator<T, R> operator = builder.fold(initialValue, foldFunction, function, resultType);
 
 		return input.transform(opName, resultType, operator);
-	}
-
-	private static String generateFunctionName(Function function) {
-		Class<? extends Function> functionClass = function.getClass();
-		if (functionClass.isAnonymousClass()) {
-			// getSimpleName returns an empty String for anonymous classes
-			Type[] interfaces = functionClass.getInterfaces();
-			if (interfaces.length == 0) {
-				// extends an existing class (like RichMapFunction)
-				Class<?> functionSuperClass = functionClass.getSuperclass();
-				return functionSuperClass.getSimpleName() + functionClass.getName().substring(functionClass.getEnclosingClass().getName().length());
-			} else {
-				// implements a Function interface
-				Class<?> functionInterface = functionClass.getInterfaces()[0];
-				return functionInterface.getSimpleName() + functionClass.getName().substring(functionClass.getEnclosingClass().getName().length());
-			}
-		} else {
-			return functionClass.getSimpleName();
-		}
-	}
-
-	private static String generateOperatorName(
-			WindowAssigner<?, ?> assigner,
-			Trigger<?, ?> trigger,
-			@Nullable Evictor<?, ?> evictor,
-			Function function1,
-			@Nullable Function function2) {
-		return "Window(" +
-			assigner + ", " +
-			trigger.getClass().getSimpleName() + ", " +
-			(evictor == null ? "" : (evictor.getClass().getSimpleName() + ", ")) +
-			generateFunctionName(function1) +
-			(function2 == null ? "" : (", " + generateFunctionName(function2))) +
-			")";
 	}
 
 	// ------------------------------------------------------------------------
@@ -1543,6 +1088,6 @@ public class WindowedStream<T, K, W extends Window> {
 
 	@VisibleForTesting
 	long getAllowedLateness() {
-		return allowedLateness;
+		return builder.getAllowedLateness();
 	}
 }
