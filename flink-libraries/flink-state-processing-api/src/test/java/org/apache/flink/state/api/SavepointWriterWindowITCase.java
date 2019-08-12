@@ -111,6 +111,11 @@ public class SavepointWriterWindowITCase extends AbstractTestBase {
 			"process",
 			transformation -> transformation.process(new CustomProcessWindowFunction()),
 			stream -> stream.process(new CustomProcessWindowFunction())
+		),
+		Tuple3.of(
+			"min",
+			transformation -> transformation.min(0),
+			stream -> stream.min(0)
 		)
 	);
 

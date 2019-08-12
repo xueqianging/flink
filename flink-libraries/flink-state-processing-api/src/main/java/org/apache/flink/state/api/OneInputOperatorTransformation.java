@@ -34,6 +34,14 @@ import org.apache.flink.state.api.output.TimestampAssignerWrapper;
 import org.apache.flink.state.api.output.operators.BroadcastStateBootstrapOperator;
 import org.apache.flink.state.api.output.operators.StateBootstrapOperator;
 import org.apache.flink.streaming.api.functions.TimestampAssigner;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.streaming.util.keys.KeySelectorUtil;
 
 import javax.annotation.Nullable;
@@ -191,6 +199,55 @@ public class OneInputOperatorTransformation<T> {
 
 		TypeInformation<Tuple> keyType = TypeExtractor.getKeySelectorTypes(keySelector, dataSet.getType());
 		return new KeyedOperatorTransformation<>(dataSet, operatorMaxParallelism, timestamper, keySelector, keyType);
+	}
+	/**
+	 * Windows this {@code KeyedOperatorTransformation} into tumbling time windows.
+	 *
+	 * <p>This is a shortcut for either {@code .window(TumblingEventTimeWindows.of(size))} or
+	 * {@code .window(TumblingProcessingTimeWindows.of(size))} depending whether or not
+	 * a {@code TimestampAssigner} has been set.
+	 *
+	 * @param size The size of the window.
+	 */
+	public WindowAllOperatorTransformation<T, TimeWindow> timeWindowAll(org.apache.flink.streaming.api.windowing.time.Time size) {
+		if (timestamper == null) {
+			return windowAll(TumblingProcessingTimeWindows.of(size));
+		} else {
+			return windowAll(TumblingEventTimeWindows.of(size));
+		}
+	}
+
+	/**
+	 * Windows this {@code KeyedOperatorTransformation} into tumbling time windows.
+	 *
+	 * <p>This is a shortcut for either {@code .window(SlidingEventTimeWindows.of(size, slide))} or
+	 * 	 * {@code .window(SlidingProcessingTimeWindows.of(size, slide))} depending whether or not
+	 * a {@code TimestampAssigner} has been set.
+	 *
+	 * @param size The size of the window.
+	 * @param slide The slide interval of the generated windows.
+	 */
+	public WindowAllOperatorTransformation<T, TimeWindow> timeWindowAll(org.apache.flink.streaming.api.windowing.time.Time size, Time slide) {
+		if (timestamper == null) {
+			return windowAll(SlidingProcessingTimeWindows.of(size, slide));
+		} else {
+			return windowAll(SlidingEventTimeWindows.of(size, slide));
+		}
+	}
+
+	/**
+	 * Windows this transformation into a {@code WindowedOperatorTransformation}, which bootstraps state
+	 * that can be restored by a {@code WindowOperator}. Elements are put into windows by a {@link WindowAssigner}.
+	 * The grouping of elements is done both by key and by window.
+	 *
+	 * <p>A {@link org.apache.flink.streaming.api.windowing.triggers.Trigger} can be defined to
+	 * specify when windows are evaluated. However, {@code WindowAssigners} have a default
+	 * {@code Trigger} that is used if a {@code Trigger} is not specified.
+	 *
+	 * @param assigner The {@code WindowAssigner} that assigns elements to windows.
+	 */
+	public <W extends Window> WindowAllOperatorTransformation<T, W> windowAll(WindowAssigner<? super T, W> assigner) {
+		return new WindowAllOperatorTransformation<>(dataSet, operatorMaxParallelism, timestamper, assigner);
 	}
 }
 
