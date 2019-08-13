@@ -106,6 +106,7 @@ public class OneInputOperatorTransformation<T> {
 	 * @return An {@link OperatorTransformation} that can be added to a {@link Savepoint}.
 	 */
 	public BootstrapTransformation<T> transform(StateBootstrapFunction<T> processFunction) {
+		operatorMaxParallelism = OptionalInt.of(1);
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapOperator<>(timestamp, path, processFunction);
 
 		return transform(factory);
@@ -200,6 +201,7 @@ public class OneInputOperatorTransformation<T> {
 		TypeInformation<Tuple> keyType = TypeExtractor.getKeySelectorTypes(keySelector, dataSet.getType());
 		return new KeyedOperatorTransformation<>(dataSet, operatorMaxParallelism, timestamper, keySelector, keyType);
 	}
+
 	/**
 	 * Windows this {@code KeyedOperatorTransformation} into tumbling time windows.
 	 *
@@ -209,7 +211,7 @@ public class OneInputOperatorTransformation<T> {
 	 *
 	 * @param size The size of the window.
 	 */
-	public WindowAllOperatorTransformation<T, TimeWindow> timeWindowAll(org.apache.flink.streaming.api.windowing.time.Time size) {
+	public WindowAllOperatorTransformation<T, TimeWindow> timeWindowAll(Time size) {
 		if (timestamper == null) {
 			return windowAll(TumblingProcessingTimeWindows.of(size));
 		} else {
@@ -227,7 +229,7 @@ public class OneInputOperatorTransformation<T> {
 	 * @param size The size of the window.
 	 * @param slide The slide interval of the generated windows.
 	 */
-	public WindowAllOperatorTransformation<T, TimeWindow> timeWindowAll(org.apache.flink.streaming.api.windowing.time.Time size, Time slide) {
+	public WindowAllOperatorTransformation<T, TimeWindow> timeWindowAll(Time size, Time slide) {
 		if (timestamper == null) {
 			return windowAll(SlidingProcessingTimeWindows.of(size, slide));
 		} else {
@@ -247,7 +249,7 @@ public class OneInputOperatorTransformation<T> {
 	 * @param assigner The {@code WindowAssigner} that assigns elements to windows.
 	 */
 	public <W extends Window> WindowAllOperatorTransformation<T, W> windowAll(WindowAssigner<? super T, W> assigner) {
-		return new WindowAllOperatorTransformation<>(dataSet, operatorMaxParallelism, timestamper, assigner);
+		return null; //new WindowAllOperatorTransformation<>(dataSet, timestamper, assigner);
 	}
 }
 

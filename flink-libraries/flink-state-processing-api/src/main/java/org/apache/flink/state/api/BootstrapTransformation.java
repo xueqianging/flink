@@ -34,7 +34,6 @@ import org.apache.flink.state.api.functions.Timestamper;
 import org.apache.flink.state.api.output.BoundedOneInputStreamTaskRunner;
 import org.apache.flink.state.api.output.OperatorSubtaskStateReducer;
 import org.apache.flink.state.api.output.TaggedOperatorSubtaskState;
-import org.apache.flink.state.api.output.operators.BroadcastStateBootstrapOperator;
 import org.apache.flink.state.api.output.partitioner.HashSelector;
 import org.apache.flink.state.api.output.partitioner.KeyGroupRangePartitioner;
 import org.apache.flink.state.api.runtime.BoundedStreamConfig;
@@ -171,13 +170,9 @@ public class BootstrapTransformation<T> {
 			.mapPartition(operatorRunner)
 			.name(operatorID.toHexString());
 
-		if (operator instanceof BroadcastStateBootstrapOperator) {
-			subtaskStates = subtaskStates.setParallelism(1);
-		} else {
-			int currentParallelism = getParallelism(subtaskStates);
-			if (currentParallelism > localMaxParallelism) {
-				subtaskStates.setParallelism(localMaxParallelism);
-			}
+		int currentParallelism = getParallelism(subtaskStates);
+		if (currentParallelism > localMaxParallelism) {
+			subtaskStates.setParallelism(localMaxParallelism);
 		}
 		return subtaskStates;
 	}
