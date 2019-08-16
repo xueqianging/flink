@@ -38,11 +38,11 @@ public interface StateBackendFactory<T extends StateBackend> {
 
 	/**
 	 * Creates the state backend, optionally using the given configuration.
-	 * 
+	 *
 	 * @param config The Flink configuration (loaded by the TaskManager).
 	 * @param classLoader The class loader that should be used to load the state backend.
-	 * @return The created state backend. 
-	 * 
+	 * @return The created state backend.
+	 *
 	 * @throws IllegalConfigurationException
 	 *             If the configuration misses critical values, or specifies invalid values
 	 * @throws IOException

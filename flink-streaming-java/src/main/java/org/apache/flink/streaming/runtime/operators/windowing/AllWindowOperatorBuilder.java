@@ -27,45 +27,43 @@ import org.apache.flink.api.common.state.AggregatingStateDescriptor;
 import org.apache.flink.api.common.state.FoldingStateDescriptor;
 import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.streaming.api.functions.windowing.AggregateApplyWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.FoldApplyProcessWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.FoldApplyWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.ReduceApplyProcessWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.ReduceApplyWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.functions.NullByteKeySelector;
+import org.apache.flink.streaming.api.functions.windowing.AggregateApplyAllWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.FoldApplyAllWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.FoldApplyProcessAllWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.ProcessAllWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.ReduceApplyAllWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.ReduceApplyProcessAllWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.BaseAlignedWindowAssigner;
 import org.apache.flink.streaming.api.windowing.assigners.MergingWindowAssigner;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
 import org.apache.flink.streaming.api.windowing.triggers.Trigger;
 import org.apache.flink.streaming.api.windowing.windows.Window;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalAggregateProcessWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableProcessWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueProcessWindowFunction;
-import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueWindowFunction;
+import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalAggregateProcessAllWindowFunction;
+import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableAllWindowFunction;
+import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalIterableProcessAllWindowFunction;
+import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueAllWindowFunction;
+import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueProcessAllWindowFunction;
 import org.apache.flink.util.Preconditions;
 
 /**
  * A builder for creating {@code WindowOperator}'s.
- * @param <K> The type of key returned by the {@code KeySelector}.
  * @param <T> The type of the incoming elements.
  * @param <W> The type of {@code Window} that the {@code WindowAssigner} assigns.
  */
-public class WindowOperatorBuilder<T, K, W extends Window>  extends WindowOperatorBuilderBase<T, K, W> {
+public class AllWindowOperatorBuilder<T, W extends Window>  extends WindowOperatorBuilderBase<T, Byte, W> {
 
-	public WindowOperatorBuilder(
+	public AllWindowOperatorBuilder(
 		WindowAssigner<? super T, W> windowAssigner,
 		Trigger<? super T, ? super W> trigger,
 		ExecutionConfig config,
-		TypeInformation<T> inputType,
-		KeySelector<T, K> keySelector,
-		TypeInformation<K> keyType) {
-		super(windowAssigner, trigger, config, inputType, keySelector, keyType);
+		TypeInformation<T> inputType) {
+		super(windowAssigner, trigger, config, inputType, new NullByteKeySelector<>(), Types.BYTE);
 	}
 
-	public <R> WindowOperator<K, T, ?, R, W> reduce(ReduceFunction<T> reduceFunction, WindowFunction<T, R, K, W> function) {
+	public <R> WindowOperator<Byte, T, ?, R, W> reduce(ReduceFunction<T> reduceFunction, AllWindowFunction<T, R, W> function) {
 		Preconditions.checkNotNull(reduceFunction, "ReduceFunction cannot be null");
 		Preconditions.checkNotNull(function, "WindowFunction cannot be null");
 
@@ -74,15 +72,15 @@ public class WindowOperatorBuilder<T, K, W extends Window>  extends WindowOperat
 		}
 
 		if (evictor != null) {
-			return buildEvictingWindowOperator(new InternalIterableWindowFunction<>(new ReduceApplyWindowFunction<>(reduceFunction, function)));
+			return buildEvictingWindowOperator(new InternalIterableAllWindowFunction<>(new ReduceApplyAllWindowFunction<>(reduceFunction, function)));
 		} else {
 			ReducingStateDescriptor<T> stateDesc = new ReducingStateDescriptor<>(WINDOW_STATE_NAME, reduceFunction, inputType.createSerializer(config));
 
-			return buildWindowOperator(stateDesc, new InternalSingleValueWindowFunction<>(function));
+			return buildWindowOperator(stateDesc, new InternalSingleValueAllWindowFunction<>(function));
 		}
 	}
 
-	public <R> WindowOperator<K, T, ?, R, W> reduce(ReduceFunction<T> reduceFunction, ProcessWindowFunction<T, R, K, W> function) {
+	public <R> WindowOperator<Byte, T, ?, R, W> reduce(ReduceFunction<T> reduceFunction, ProcessAllWindowFunction<T, R, W> function) {
 		Preconditions.checkNotNull(reduceFunction, "ReduceFunction cannot be null");
 		Preconditions.checkNotNull(function, "ProcessWindowFunction cannot be null");
 
@@ -91,19 +89,19 @@ public class WindowOperatorBuilder<T, K, W extends Window>  extends WindowOperat
 		}
 
 		if (evictor != null) {
-			return buildEvictingWindowOperator(new InternalIterableProcessWindowFunction<>(new ReduceApplyProcessWindowFunction<>(reduceFunction, function)));
+			return buildEvictingWindowOperator(new InternalIterableProcessAllWindowFunction<>(new ReduceApplyProcessAllWindowFunction<>(reduceFunction, function)));
 		} else {
 			ReducingStateDescriptor<T> stateDesc = new ReducingStateDescriptor<>(WINDOW_STATE_NAME, reduceFunction, inputType.createSerializer(config));
 
-			return buildWindowOperator(stateDesc, new InternalSingleValueProcessWindowFunction<>(function));
+			return buildWindowOperator(stateDesc, new InternalSingleValueProcessAllWindowFunction<>(function));
 		}
 	}
 
 	@Deprecated
-	public <ACC, R> WindowOperator<K, T, ?, R, W> fold(
+	public <ACC, R> WindowOperator<Byte, T, ?, R, W> fold(
 		ACC initialValue,
 		FoldFunction<T, ACC> foldFunction,
-		WindowFunction<ACC, R, K, W> function,
+		AllWindowFunction<ACC, R, W> function,
 		TypeInformation<ACC> foldAccumulatorType) {
 
 		Preconditions.checkNotNull(foldAccumulatorType, "FoldFunction cannot be null");
@@ -122,19 +120,19 @@ public class WindowOperatorBuilder<T, K, W extends Window>  extends WindowOperat
 		}
 
 		if (evictor != null) {
-			return buildEvictingWindowOperator(new InternalIterableWindowFunction<>(new FoldApplyWindowFunction<>(initialValue, foldFunction, function, foldAccumulatorType)));
+			return buildEvictingWindowOperator(new InternalIterableAllWindowFunction<>(new FoldApplyAllWindowFunction<>(initialValue, foldFunction, function, foldAccumulatorType)));
 		} else {
 			FoldingStateDescriptor<T, ACC> stateDesc = new FoldingStateDescriptor<>(WINDOW_STATE_NAME,
 				initialValue, foldFunction, foldAccumulatorType.createSerializer(config));
-			return buildWindowOperator(stateDesc, new InternalSingleValueWindowFunction<>(function));
+			return buildWindowOperator(stateDesc, new InternalSingleValueAllWindowFunction<>(function));
 		}
 	}
 
 	@Deprecated
-	public <ACC, R> WindowOperator<K, T, ?, R, W> fold(
+	public <ACC, R> WindowOperator<Byte, T, ?, R, W> fold(
 		ACC initialValue,
 		FoldFunction<T, ACC> foldFunction,
-		ProcessWindowFunction<ACC, R, K, W> windowFunction,
+		ProcessAllWindowFunction<ACC, R, W> windowFunction,
 		TypeInformation<ACC> foldAccumulatorType) {
 
 		Preconditions.checkNotNull(foldAccumulatorType, "FoldFunction cannot be null");
@@ -153,19 +151,19 @@ public class WindowOperatorBuilder<T, K, W extends Window>  extends WindowOperat
 		}
 
 		if (evictor != null) {
-			InternalIterableProcessWindowFunction<T, R, K, W> internalFunction = new InternalIterableProcessWindowFunction<>(
-				new FoldApplyProcessWindowFunction<>(initialValue, foldFunction, windowFunction, foldAccumulatorType));
+			InternalIterableProcessAllWindowFunction<T, R, W> internalFunction = new InternalIterableProcessAllWindowFunction<>(
+				new FoldApplyProcessAllWindowFunction<>(initialValue, foldFunction, windowFunction, foldAccumulatorType));
 			return buildEvictingWindowOperator(internalFunction);
 		} else {
 			FoldingStateDescriptor<T, ACC> stateDesc = new FoldingStateDescriptor<>(WINDOW_STATE_NAME,
 				initialValue, foldFunction, foldAccumulatorType.createSerializer(config));
-			return buildWindowOperator(stateDesc, new InternalSingleValueProcessWindowFunction<>(windowFunction));
+			return buildWindowOperator(stateDesc, new InternalSingleValueProcessAllWindowFunction<>(windowFunction));
 		}
 	}
 
-	public <ACC, V, R> WindowOperator<K, T, ?, R, W> aggregate(
+	public <ACC, V, R> WindowOperator<Byte, T, ?, R, W> aggregate(
 		AggregateFunction<T, ACC, V> aggregateFunction,
-		WindowFunction<V, R, K, W> windowFunction,
+		AllWindowFunction<V, R, W> windowFunction,
 		TypeInformation<ACC> accumulatorType) {
 
 		Preconditions.checkNotNull(aggregateFunction, "AggregateFunction cannot be null");
@@ -176,18 +174,18 @@ public class WindowOperatorBuilder<T, K, W extends Window>  extends WindowOperat
 		}
 
 		if (evictor != null) {
-			return buildEvictingWindowOperator(new InternalIterableWindowFunction<>(new AggregateApplyWindowFunction<>(aggregateFunction, windowFunction)));
+			return buildEvictingWindowOperator(new InternalIterableAllWindowFunction<>(new AggregateApplyAllWindowFunction<>(aggregateFunction, windowFunction)));
 		} else {
 			AggregatingStateDescriptor<T, ACC, V> stateDesc = new AggregatingStateDescriptor<>(WINDOW_STATE_NAME,
 				aggregateFunction, accumulatorType.createSerializer(config));
 
-			return buildWindowOperator(stateDesc, new InternalSingleValueWindowFunction<>(windowFunction));
+			return buildWindowOperator(stateDesc, new InternalSingleValueAllWindowFunction<>(windowFunction));
 		}
 	}
 
-	public <ACC, V, R> WindowOperator<K, T, ?, R, W> aggregate(
+	public <ACC, V, R> WindowOperator<Byte, T, ?, R, W> aggregate(
 		AggregateFunction<T, ACC, V> aggregateFunction,
-		ProcessWindowFunction<V, R, K, W> windowFunction,
+		ProcessAllWindowFunction<V, R, W> windowFunction,
 		TypeInformation<ACC> accumulatorType) {
 
 		Preconditions.checkNotNull(aggregateFunction, "AggregateFunction cannot be null");
@@ -198,22 +196,22 @@ public class WindowOperatorBuilder<T, K, W extends Window>  extends WindowOperat
 		}
 
 		if (evictor != null) {
-			return buildEvictingWindowOperator(new InternalAggregateProcessWindowFunction<>(aggregateFunction, windowFunction));
+			return buildEvictingWindowOperator(new InternalAggregateProcessAllWindowFunction<>(aggregateFunction, windowFunction));
 		} else {
 			AggregatingStateDescriptor<T, ACC, V> stateDesc = new AggregatingStateDescriptor<>(WINDOW_STATE_NAME,
 				aggregateFunction, accumulatorType.createSerializer(config));
 
-			return buildWindowOperator(stateDesc, new InternalSingleValueProcessWindowFunction<>(windowFunction));
+			return buildWindowOperator(stateDesc, new InternalSingleValueProcessAllWindowFunction<>(windowFunction));
 		}
 	}
 
-	public <R> WindowOperator<K, T, ?, R, W> apply(WindowFunction<T, R, K, W> function) {
+	public <R> WindowOperator<Byte, T, ?, R, W> apply(AllWindowFunction<T, R, W> function) {
 		Preconditions.checkNotNull(function, "WindowFunction cannot be null");
-		return apply(new InternalIterableWindowFunction<>(function));
+		return apply(new InternalIterableAllWindowFunction<>(function));
 	}
 
-	public <R> WindowOperator<K, T, ?, R, W> process(ProcessWindowFunction<T, R, K, W> function) {
+	public <R> WindowOperator<Byte, T, ?, R, W> process(ProcessAllWindowFunction<T, R, W> function) {
 		Preconditions.checkNotNull(function, "ProcessWindowfunction cannot be null");
-		return apply(new InternalIterableProcessWindowFunction<>(function));
+		return apply(new InternalIterableProcessAllWindowFunction<>(function));
 	}
 }

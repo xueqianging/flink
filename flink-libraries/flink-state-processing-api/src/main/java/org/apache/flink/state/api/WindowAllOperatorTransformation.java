@@ -37,15 +37,13 @@ import org.apache.flink.streaming.api.functions.aggregation.ComparableAggregator
 import org.apache.flink.streaming.api.functions.aggregation.SumAggregator;
 import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.PassThroughAllWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.PassThroughWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.ProcessAllWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
 import org.apache.flink.streaming.api.windowing.evictors.Evictor;
 import org.apache.flink.streaming.api.windowing.triggers.Trigger;
 import org.apache.flink.streaming.api.windowing.windows.Window;
+import org.apache.flink.streaming.runtime.operators.windowing.AllWindowOperatorBuilder;
 import org.apache.flink.streaming.runtime.operators.windowing.WindowOperator;
-import org.apache.flink.streaming.runtime.operators.windowing.WindowOperatorBuilder;
 
 import javax.annotation.Nullable;
 
@@ -56,9 +54,11 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 @Public
 public class WindowAllOperatorTransformation<T, W extends Window> {
 
+	private static final TypeInformation<Byte> KEY_TYPE = Types.BYTE;
+
 	private final DataSet<T> input;
 
-	private final WindowOperatorBuilder<T, Byte, W> builder;
+	private final AllWindowOperatorBuilder<T, W> builder;
 
 	private final OptionalInt operatorMaxParallelism;
 
@@ -77,13 +77,11 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 		this.timestamper = timestamper;
 		this.keySelector = new NullByteKeySelector<>();
 
-		this.builder = new WindowOperatorBuilder<>(
+		this.builder = new AllWindowOperatorBuilder<>(
 			windowAssigner,
 			windowAssigner.getDefaultTrigger(null),
 			input.getExecutionEnvironment().getConfig(),
-			input.getType(),
-			keySelector,
-			Types.BYTE
+			input.getType()
 		);
 	}
 
@@ -162,7 +160,7 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 		WindowOperator<Byte, T, ?, R, W> operator = builder.reduce(reduceFunction, function);
 
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapWrapperOperator<>(timestamp, path, operator);
-		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, keyType);
+		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, KEY_TYPE);
 	}
 
 
@@ -178,15 +176,15 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	 * @return The data stream that is the result of applying the window function to the window.
 	 */
 	@Internal
-	public <R> BootstrapTransformation<T> reduce(ReduceFunction<T> reduceFunction, ProcessWindowFunction<T, R, K, W> function) {
+	public <R> BootstrapTransformation<T> reduce(ReduceFunction<T> reduceFunction, ProcessAllWindowFunction<T, R, W> function) {
 		//clean the closures
 		function = input.clean(function);
 		reduceFunction = input.clean(reduceFunction);
 
-		WindowOperator<K, T, ?, R, W> operator = builder.reduce(reduceFunction, function);
+		WindowOperator<Byte, T, ?, R, W> operator = builder.reduce(reduceFunction, function);
 
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapWrapperOperator<>(timestamp, path, operator);
-		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, keyType);
+		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, KEY_TYPE);
 	}
 
 	// ------------------------------------------------------------------------
@@ -243,7 +241,7 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 			throw new UnsupportedOperationException("This aggregation function cannot be a RichFunction.");
 		}
 
-		return aggregate(function, new PassThroughWindowFunction<>(), accumulatorType);
+		return aggregate(function, new PassThroughAllWindowFunction<>(), accumulatorType);
 	}
 
 	/**
@@ -267,7 +265,7 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	@PublicEvolving
 	public <ACC, V, R> BootstrapTransformation<T> aggregate(
 		AggregateFunction<T, ACC, V> aggFunction,
-		WindowFunction<V, R, K, W> windowFunction) {
+		AllWindowFunction<V, R, W> windowFunction) {
 
 		checkNotNull(aggFunction, "aggFunction");
 		checkNotNull(windowFunction, "windowFunction");
@@ -300,7 +298,7 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	@PublicEvolving
 	public <ACC, V, R> BootstrapTransformation<T> aggregate(
 		AggregateFunction<T, ACC, V> aggregateFunction,
-		WindowFunction<V, R, K, W> windowFunction,
+		AllWindowFunction<V, R, W> windowFunction,
 		TypeInformation<ACC> accumulatorType) {
 
 		checkNotNull(aggregateFunction, "aggregateFunction");
@@ -315,10 +313,10 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 		windowFunction = input.clean(windowFunction);
 		aggregateFunction = input.clean(aggregateFunction);
 
-		WindowOperator<K, T, ?, R, W> operator = builder.aggregate(aggregateFunction, windowFunction, accumulatorType);
+		WindowOperator<Byte, T, ?, R, W> operator = builder.aggregate(aggregateFunction, windowFunction, accumulatorType);
 
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapWrapperOperator<>(timestamp, path, operator);
-		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, keyType);
+		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, KEY_TYPE);
 	}
 
 	/**
@@ -342,7 +340,7 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	@PublicEvolving
 	public <ACC, V, R> BootstrapTransformation<T> aggregate(
 		AggregateFunction<T, ACC, V> aggFunction,
-		ProcessWindowFunction<V, R, K, W> windowFunction) {
+		ProcessAllWindowFunction<V, R, W> windowFunction) {
 
 		checkNotNull(aggFunction, "aggFunction");
 		checkNotNull(windowFunction, "windowFunction");
@@ -375,7 +373,7 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	@PublicEvolving
 	public <ACC, V, R> BootstrapTransformation<T> aggregate(
 		AggregateFunction<T, ACC, V> aggregateFunction,
-		ProcessWindowFunction<V, R, K, W> windowFunction,
+		ProcessAllWindowFunction<V, R, W> windowFunction,
 		TypeInformation<ACC> accumulatorType) {
 
 		checkNotNull(aggregateFunction, "aggregateFunction");
@@ -390,10 +388,10 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 		windowFunction = input.clean(windowFunction);
 		aggregateFunction = input.clean(aggregateFunction);
 
-		WindowOperator<K, T, ?, R, W> operator = builder.aggregate(aggregateFunction, windowFunction, accumulatorType);
+		WindowOperator<Byte, T, ?, R, W> operator = builder.aggregate(aggregateFunction, windowFunction, accumulatorType);
 
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapWrapperOperator<>(timestamp, path, operator);
-		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, keyType);
+		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, KEY_TYPE);
 	}
 
 	// ------------------------------------------------------------------------
@@ -411,11 +409,11 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	 * @param function The window function.
 	 * @return The data stream that is the result of applying the window function to the window.
 	 */
-	public <R> BootstrapTransformation<T> apply(WindowFunction<T, R, K, W> function) {
-		WindowOperator<K, T, ?, R, W> operator = builder.apply(function);
+	public <R> BootstrapTransformation<T> apply(AllWindowFunction<T, R, W> function) {
+		WindowOperator<Byte, T, ?, R, W> operator = builder.apply(function);
 
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapWrapperOperator<>(timestamp, path, operator);
-		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, keyType);
+		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, KEY_TYPE);
 	}
 
 	/**
@@ -430,13 +428,13 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	 * @param resultType Type information for the result type of the window function
 	 * @return The data stream that is the result of applying the window function to the window.
 	 */
-	public <R> BootstrapTransformation<T> apply(WindowFunction<T, R, K, W> function, TypeInformation<R> resultType) {
+	public <R> BootstrapTransformation<T> apply(AllWindowFunction<T, R, W> function, TypeInformation<R> resultType) {
 		function = input.clean(function);
 
-		WindowOperator<K, T, ?, R, W> operator = builder.apply(function);
+		WindowOperator<Byte, T, ?, R, W> operator = builder.apply(function);
 
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapWrapperOperator<>(timestamp, path, operator);
-		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, keyType);
+		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, KEY_TYPE);
 	}
 
 	/**
@@ -451,11 +449,11 @@ public class WindowAllOperatorTransformation<T, W extends Window> {
 	 * @return The data stream that is the result of applying the window function to the window.
 	 */
 	@PublicEvolving
-	public <R> BootstrapTransformation<T> process(ProcessWindowFunction<T, R, K, W> function) {
-		WindowOperator<K, T, ?, R, W> operator = builder.process(function);
+	public <R> BootstrapTransformation<T> process(ProcessAllWindowFunction<T, R, W> function) {
+		WindowOperator<Byte, T, ?, R, W> operator = builder.process(function);
 
 		SavepointWriterOperatorFactory factory = (timestamp, path) -> new StateBootstrapWrapperOperator<>(timestamp, path, operator);
-		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, keyType);
+		return new BootstrapTransformation<>(input, operatorMaxParallelism, timestamper, factory, keySelector, KEY_TYPE);
 	}
 
 
