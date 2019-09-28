@@ -39,6 +39,7 @@ import static org.apache.flink.runtime.state.KeyGroupRangeAssignment.UPPER_BOUND
  * @see NewSavepoint
  */
 @PublicEvolving
+@SuppressWarnings("WeakerAccess")
 public final class Savepoint {
 
 	private Savepoint() {}

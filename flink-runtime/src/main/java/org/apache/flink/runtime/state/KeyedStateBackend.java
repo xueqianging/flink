@@ -21,6 +21,7 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.util.Disposable;
 
 import java.util.stream.Stream;
@@ -74,6 +75,14 @@ public interface KeyedStateBackend<K>
 	 * @param namespace Namespace for which existing keys will be returned.
 	 */
 	<N> Stream<K> getKeys(String state, N namespace);
+
+	/**
+	 * @return state A full scan of all key namespace pairs in the state backend. Modifications to the state
+	 *              during iteration is not supported.
+	 * @param <N> The type of the namespace.
+	 * @param state State variable for which existing keys will be returned.
+	 */
+	<N> Stream<Tuple2<K, N>> getKeysAndNamespaces(String state);
 
 	/**
 	 * Creates or retrieves a keyed state backed by this state backend.

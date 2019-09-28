@@ -18,170 +18,128 @@
 
 package org.apache.flink.state.api;
 
-import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.common.JobSubmissionResult;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
-import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
-import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.state.api.functions.KeyedStateReaderFunction;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
-import org.apache.flink.streaming.api.functions.source.SourceFunction;
-import org.apache.flink.test.util.AbstractTestBase;
-import org.apache.flink.util.AbstractID;
+import org.apache.flink.streaming.api.watermark.Watermark;
+import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
-import java.time.Duration;
+import javax.annotation.Nullable;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * IT case for reading state.
  */
-public class SavepointReaderKeyedStateITCase extends AbstractTestBase {
+@RunWith(Parameterized.class)
+public class SavepointReaderKeyedStateITCase extends SavepointTestBase {
 	private static final String uid = "stateful-operator";
 
 	private static ValueStateDescriptor<Integer> valueState = new ValueStateDescriptor<>("value", Types.INT);
 
-	@Test
-	public void testKeyedInputFormat() throws Exception {
-		runKeyedState(new MemoryStateBackend());
-		// Reset the cluster so we can change the
-		// state backend in the StreamEnvironment.
-		// If we don't do this the tests will fail.
-		miniClusterResource.after();
-		miniClusterResource.before();
-		runKeyedState(new RocksDBStateBackend((StateBackend) new MemoryStateBackend()));
+	private final StateBackend backend;
+
+	@Parameterized.Parameters(name = "backend = {0}")
+	public static Object[] data() {
+		return new Object[][] {
+			{ "memory", new MemoryStateBackend() },
+			{ "rocksdb", new RocksDBStateBackend((StateBackend) new MemoryStateBackend())}
+		};
 	}
 
-	private void runKeyedState(StateBackend backend) throws Exception {
-		StreamExecutionEnvironment streamEnv = StreamExecutionEnvironment.getExecutionEnvironment();
-		streamEnv.setStateBackend(backend);
-		streamEnv.setParallelism(4);
+	private static final List<Pojo> elements = Arrays.asList(
+		Pojo.of(1, 1),
+		Pojo.of(2, 2),
+		Pojo.of(3, 3));
 
-		streamEnv
-			.addSource(new SavepointSource())
-			.rebalance()
-			.keyBy(id -> id.key)
-			.process(new KeyedStatefulOperator())
-			.uid(uid)
-			.addSink(new DiscardingSink<>());
+	private static final List<Integer> numbers = Arrays.asList(1, 2, 3);
 
-		JobGraph jobGraph = streamEnv.getStreamGraph().getJobGraph();
+	@SuppressWarnings("unused")
+	public SavepointReaderKeyedStateITCase(String name, StateBackend backend) {
+		this.backend = backend;
+	}
 
-		String path = takeSavepoint(jobGraph);
+	@Test
+	public void testUserKeyedStateReader() throws Exception {
+		String savepointPath = takeSavepoint(elements, source -> {
+			StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+			env.setStateBackend(backend);
+			env.setParallelism(4);
+
+			env
+				.addSource(source)
+				.rebalance()
+				.keyBy(id -> id.key)
+				.process(new KeyedStatefulOperator())
+				.uid(uid)
+				.addSink(new DiscardingSink<>());
+
+			return env;
+		});
 
 		ExecutionEnvironment batchEnv = ExecutionEnvironment.getExecutionEnvironment();
-		ExistingSavepoint savepoint = Savepoint.load(batchEnv, path, backend);
+		ExistingSavepoint savepoint = Savepoint.load(batchEnv, savepointPath, backend);
 
 		List<Pojo> results = savepoint
 			.readKeyedState(uid, new Reader())
 			.collect();
 
-		Set<Pojo> expected = SavepointSource.getElements();
+		Set<Pojo> expected = new HashSet<>(elements);
 
 		Assert.assertEquals("Unexpected results from keyed state", expected, new HashSet<>(results));
 	}
 
-	private String takeSavepoint(JobGraph jobGraph) throws Exception {
-		SavepointSource.initializeForTest();
+	@Test
+	public void testReduceWindowStateReader() throws Exception {
+		String savepointPath = takeSavepoint(numbers, source -> {
+			StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+			env.setStateBackend(backend);
+			env.setParallelism(4);
 
-		ClusterClient<?> client = miniClusterResource.getClusterClient();
-		client.setDetached(true);
+			env
+				.addSource(source)
+				.rebalance()
+				.assignTimestampsAndWatermarks(new ZeroTimestampAssigner<>())
+				.keyBy(id -> id)
+				.timeWindow(Time.milliseconds(10))
+				.reduce((a, b) -> a + b)
+				.uid(uid)
+				.addSink(new DiscardingSink<>());
 
-		JobID jobId = jobGraph.getJobID();
+			return env;
+		});
 
-		Deadline deadline = Deadline.fromNow(Duration.ofMinutes(5));
+		ExecutionEnvironment batchEnv = ExecutionEnvironment.getExecutionEnvironment();
+		ExistingSavepoint savepoint = Savepoint.load(batchEnv, savepointPath, backend);
 
-		String dirPath = getTempDirPath(new AbstractID().toHexString());
+		List<Integer> results = savepoint
+			.timeWindow(uid)
+			.reduce((a, b) -> a + b, Types.INT, Types.INT)
+			.collect();
 
-		try {
-			client.setDetached(true);
-			JobSubmissionResult result = client.submitJob(jobGraph, getClass().getClassLoader());
-
-			boolean finished = false;
-			while (deadline.hasTimeLeft()) {
-				if (SavepointSource.isFinished()) {
-					finished = true;
-
-					break;
-				}
-			}
-
-			if (!finished) {
-				Assert.fail("Failed to initialize state within deadline");
-			}
-
-			CompletableFuture<String> path = client.triggerSavepoint(result.getJobID(), dirPath);
-			return path.get(deadline.timeLeft().toMillis(), TimeUnit.MILLISECONDS);
-		} finally {
-			client.cancel(jobId);
-		}
-	}
-
-	private static class SavepointSource implements SourceFunction<Pojo> {
-		private static volatile boolean finished;
-
-		private volatile boolean running = true;
-
-		private static final Pojo[] elements = {
-			Pojo.of(1, 1),
-			Pojo.of(2, 2),
-			Pojo.of(3, 3)};
-
-		@Override
-		public void run(SourceContext<Pojo> ctx) {
-			synchronized (ctx.getCheckpointLock()) {
-				for (Pojo element : elements) {
-					ctx.collect(element);
-				}
-
-				finished = true;
-			}
-
-			while (running) {
-				try {
-					Thread.sleep(100);
-				} catch (InterruptedException e) {
-					// ignore
-				}
-			}
-		}
-
-		@Override
-		public void cancel() {
-			running = false;
-		}
-
-		private static void initializeForTest() {
-			finished = false;
-		}
-
-		private static boolean isFinished() {
-			return finished;
-		}
-
-		private static Set<Pojo> getElements() {
-			return new HashSet<>(Arrays.asList(elements));
-		}
+		Set<Integer> expected = new HashSet<>(numbers);
+		Assert.assertEquals("Unexpected results from keyed state", expected, new HashSet<>(results));
 	}
 
 	private static class KeyedStatefulOperator extends KeyedProcessFunction<Integer, Pojo, Void> {
@@ -262,6 +220,19 @@ public class SavepointReaderKeyedStateITCase extends AbstractTestBase {
 		@Override
 		public int hashCode() {
 			return Objects.hash(key, state, eventTimeTimer, processingTimeTimer);
+		}
+	}
+
+	private static class ZeroTimestampAssigner<T> implements AssignerWithPunctuatedWatermarks<T> {
+		@Nullable
+		@Override
+		public Watermark checkAndGetNextWatermark(T lastElement, long extractedTimestamp) {
+			return null;
+		}
+
+		@Override
+		public long extractTimestamp(T element, long previousElementTimestamp) {
+			return 0;
 		}
 	}
 }

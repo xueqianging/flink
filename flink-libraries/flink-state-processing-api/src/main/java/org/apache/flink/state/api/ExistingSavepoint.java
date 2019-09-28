@@ -38,6 +38,8 @@ import org.apache.flink.state.api.input.KeyedStateInputFormat;
 import org.apache.flink.state.api.input.ListStateInputFormat;
 import org.apache.flink.state.api.input.UnionStateInputFormat;
 import org.apache.flink.state.api.runtime.metadata.SavepointMetadata;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
@@ -280,5 +282,24 @@ public class ExistingSavepoint extends WritableSavepoint<ExistingSavepoint> {
 			function);
 
 		return env.createInput(inputFormat, outTypeInfo);
+	}
+
+	public WindowStateReader<TimeWindow> timeWindow(String uid) throws IOException {
+		return window(uid, new TimeWindow.Serializer());
+	}
+
+	public <W extends Window> WindowStateReader<W> window(String uid, Class<W> window) throws IOException {
+		TypeInformation<W> typeInfo = TypeInformation.of(window);
+		return window(uid, typeInfo);
+	}
+
+	public <W extends Window> WindowStateReader<W> window(String uid, TypeInformation<W> windowType) throws IOException {
+		TypeSerializer<W> serializer = windowType.createSerializer(env.getConfig());
+		return window(uid, serializer);
+	}
+
+	public <W extends Window> WindowStateReader<W> window(String uid, TypeSerializer<W> windowSerializer) throws IOException {
+		OperatorState operatorState = metadata.getOperatorState(uid);
+		return new WindowStateReader<>(env, operatorState, stateBackend, windowSerializer);
 	}
 }
