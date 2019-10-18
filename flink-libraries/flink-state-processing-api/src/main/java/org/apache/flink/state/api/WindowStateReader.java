@@ -12,11 +12,12 @@ import org.apache.flink.state.api.input.WindowStateInputFormat;
 import org.apache.flink.state.api.output.windowing.InternalSingleValueWindowStateReaderFunction;
 import org.apache.flink.state.api.output.windowing.PassThroughWindowReaderFunction;
 import org.apache.flink.streaming.api.windowing.windows.Window;
+import org.apache.flink.streaming.runtime.operators.windowing.WindowOperatorBuilder;
 
 @SuppressWarnings("WeakerAccess")
 public class WindowStateReader<W extends Window> {
 
-	private static final String WINDOW_STATE_NAME = "window-contents";
+	private static final String WINDOW_STATE_NAME = WindowOperatorBuilder.WINDOW_STATE_NAME;
 
 	private final ExecutionEnvironment env;
 
@@ -34,7 +35,7 @@ public class WindowStateReader<W extends Window> {
 	}
 
 	public <K, OUT> DataSet<OUT> reduce(ReduceFunction<OUT> function, TypeInformation<K> keyType, TypeInformation<OUT> typeInfo) {
-		ReducingStateDescriptor<OUT> descriptor = new ReducingStateDescriptor<OUT>(WINDOW_STATE_NAME, function, typeInfo);
+		ReducingStateDescriptor<OUT> descriptor = new ReducingStateDescriptor<>(WINDOW_STATE_NAME, function, typeInfo);
 
 		PassThroughWindowReaderFunction<K, OUT, W> windowReaderFunction = new PassThroughWindowReaderFunction<>();
 
