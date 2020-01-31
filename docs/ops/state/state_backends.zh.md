@@ -71,6 +71,8 @@ MemoryStateBackend 适用场景：
   - 本地开发和调试。
   - 状态很小的 Job，例如：由每次只处理一条记录的函数（Map、FlatMap、Filter 等）构成的 Job。Kafka Consumer 仅仅需要非常小的状态。
 
+It is also recommended to set [managed memory](mem_setup.html#managed-memory) to zero.
+This will ensure that the maximum amount of memory is allocated for user code on the JVM.
 
 ### FsStateBackend
 
@@ -90,6 +92,9 @@ FsStateBackend 适用场景:
 
   - 状态比较大、窗口比较长、key/value 状态比较大的 Job。
   - 所有高可用的场景。
+
+It is also recommended to set [managed memory](mem_setup.html#managed-memory) to zero.
+This will ensure that the maximum amount of memory is allocated for user code on the JVM.
 
 ### RocksDBStateBackend
 
@@ -114,6 +119,8 @@ RocksDBStateBackend 的适用场景：
 注意，你可以保留的状态大小仅受磁盘空间的限制。与状态存储在内存中的 FsStateBackend 相比，RocksDBStateBackend 允许存储非常大的状态。
 然而，这也意味着使用 RocksDBStateBackend 将会使应用程序的最大吞吐量降低。
 所有的读写都必须序列化、反序列化操作，这个比基于堆内存的 state backend 的效率要低很多。
+
+Check also recommendations about the [task executor memory configuration](../memory/mem_tuning.html#rocksdb-state-backend) for the RocksDBStateBackend.
 
 RocksDBStateBackend 是目前唯一支持增量 CheckPoint 的 State Backend (见 [这里](large_state_tuning.html))。
 
