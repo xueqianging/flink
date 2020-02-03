@@ -30,11 +30,11 @@ Flink allows both high level and fine-grained tuning of memory allocation within
 * toc
 {:toc}
 
-The further described memory configuration is applicable starting with the release version 1.10. If you upgrade Flink
+The further described memory configuration is applicable starting with the release version *1.10*. If you upgrade Flink
 from earlier versions, check the [migration guide](mem_migration.html) because many changes were introduced with the 1.10 release.
 
-<strong>Note: This memory setup guide is relevant only for Task Executors!</strong>
-Check Job Manager [related configuration options](../config.html#jobmanager) for the memory setup of Job Manager.
+<strong>Note:</strong> This memory setup guide is relevant <strong>only for task executors</strong>!
+Check [job manager related configuration options](../config.html#jobmanager) for the memory setup of job manager.
 
 ## Configure Total Memory
 
@@ -67,7 +67,7 @@ For the containerized deployments it corresponds to the size of the requested co
 
 Another way to setup the memory is to set [task heap](#task-operator-heap-memory) and [managed memory](#managed-memory)
 ([taskmanager.memory.task.heap.size](../config.html#taskmanager-memory-task-heap-size) and [taskmanager.memory.managed.size](../config.html#taskmanager-memory-managed-size)).
-This more fine-grained approach is described further in a [separate section](#configure-heap-and-managed-memory).
+This more fine-grained approach is described in more detail [here](#configure-heap-and-managed-memory).
 
 <strong>Note:</strong> One of the three mentioned ways has to be used to configure Flink’s memory (except for local execution), or the Flink startup will fail.
 This means that one of the following option subsets, which do not have default values, have to be configured explicitly in *flink-conf.yaml*:
@@ -90,8 +90,8 @@ It gives more control over the available JVM heap to Flink’s tasks and its [ma
 The rest of the memory components will be adjusted automatically, based on default values or additionally configured options.
 [Here](#detailed-memory-model) are more details about the other memory components.
 
-<strong>Note:</strong> If you have explicitly configured task heap and managed memory, it is recommended to set neither
-*total process memory* nor *total Flink memory*. Otherwise, it may lead to deployment failures due to potential memory configuration conflicts.
+<strong>Note:</strong> If you have configured the task heap and managed memory explicitly, it is recommended to set neither
+*total process memory* nor *total Flink memory*. Otherwise, it may easily lead to memory configuration conflicts.
 
 ### Task (Operator) Heap Memory
 
@@ -99,38 +99,37 @@ If you want to guarantee that a certain amount of JVM heap is available for your
 explicitly ([taskmanager.memory.task.heap.size](../config.html#taskmanager-memory-task-heap-size)).
 It will be added to the JVM heap size and will be dedicated to Flink’s operators running the user code.
 
-### Managed memory
+### Managed Memory
 
-This type of memory is native (off-heap) and explicitly managed by Flink. Use cases for *managed memory* are the following:
+*Managed memory* is managed by Flink and is allocated as native memory (off-heap). The following workloads use *managed memory*:
 * Streaming jobs can use it for [RocksDB state backend](../state/state_backends.html#the-rocksdbstatebackend).
 * [Batch jobs](../../dev/batch) can use it for sorting, hash tables, caching of intermediate results.
 
-The size of managed memory can be
-* either configured explicitly ([taskmanager.memory.managed.size](../config.html#taskmanager-memory-managed-size))
-* or computed as a fraction of *total Flink memory* ([taskmanager.memory.managed.fraction](../config.html#taskmanager-memory-managed-fraction))
+The size of *managed memory* can be
+* either configured explicitly via [taskmanager.memory.managed.size](../config.html#taskmanager-memory-managed-size)
+* or computed as a fraction of *total Flink memory* via [taskmanager.memory.managed.fraction](../config.html#taskmanager-memory-managed-fraction)
 
-If both *size* and *fraction* are explicitly set, the *size* will be used and the *fraction* will be ignored.
+*size* will override *fraction*, if both are set.
 If neither *size* nor *fraction* is explicitly configured, the [default fraction](../config.html#taskmanager-memory-managed-fraction) will be used.
 
 See also [how to configure memory for state backends](mem_tuning.html#configure-memory-for-state-backends) and [batch jobs](mem_tuning.html#configure-memory-for-batch-jobs).
 
-## Configure off-heap memory (direct or native)
+## Configure Off-Heap Memory (direct or native)
 
-The off-heap memory, allocated in user code, should be accounted for in *task off-heap memory*
+The off-heap memory which is allocated by user code should be accounted for in *task off-heap memory*
 ([taskmanager.memory.task.off-heap.size](../config.html#taskmanager-memory-task-off-heap-size)).
 
-<strong>Note:</strong> You can also increase [framework off-heap memory](#framework-memory) but this option is advanced
-and recommended to be changed if you are sure that Flink framework needs more memory.
+<strong>Note:</strong> You can also increase the [framework off-heap memory](#framework-memory). This option is advanced
+and only recommended to be changed if you are sure that the Flink framework needs more memory.
 
-Flink includes the *framework off-heap memory* and *task off-heap memory* into the *direct memory* limit controlled by JVM,
-see also [JVM Parameters](#jvm-parameters).
+Flink includes the *framework off-heap memory* and *task off-heap memory* into the *direct memory* limit of the JVM,
+see also [JVM parameters](#jvm-parameters).
 
-<strong>Note:</strong> Although, the native non-direct usage of memory can be accounted for as a part of the
-*framework off-heap memory* or *task off-heap memory*, it means that the actual *direct memory* allocation will have
-a bigger JVM limit in this case.
+<strong>Note:</strong> Although, native non-direct memory usage can be accounted for as a part of the
+*framework off-heap memory* or *task off-heap memory*, it means that the JVM's *direct memory* limit will be higher.
 
 <strong>Note:</strong> The *network memory* is also part of JVM *direct memory* but it is managed by Flink and guaranteed
-that it is always allocated within its configured size. Therefore, resizing network memory will not necessarily help in this situation.
+to never exceed its configured size. Therefore, resizing the *network memory* will not help in this situation.
 
 See also [detailed Memory Model](#detailed-memory-model).
 
@@ -163,7 +162,7 @@ which affect the size of the respective components:
 As you can see, the size of some memory components can be simply set by the respective option.
 Other components can be tuned using multiple options.
 
-### Framework memory
+### Framework Memory
 
 The *framework heap memory* and *framework off-heap memory* options are not supposed to be changed without a good reason.
 Adjust them only if you are sure that Flink needs more memory for some internal data structures or operations.
@@ -173,7 +172,7 @@ In addition, Flink dependencies, such as Hadoop may consume more direct or nativ
 <strong>Note:</strong> Neither heap nor off-heap versions of framework and task memory are currently isolated within Flink.
 The separation of framework and task memory can be used in future releases for further optimizations.
 
-### Capped fractionated components
+### Capped Fractionated Components
 
 This section describes the configuration details of the following options which can be a fraction of a certain
 [total memory](#configure-total-memory):
