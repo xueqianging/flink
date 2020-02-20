@@ -21,6 +21,7 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
@@ -44,6 +45,7 @@ import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.DefaultKeyedStateStore;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
 import org.apache.flink.runtime.state.KeyGroupsList;
 import org.apache.flink.runtime.state.KeyedStateBackend;
@@ -141,6 +143,9 @@ public abstract class AbstractStreamOperator<OUT>
 	/** Keyed state store view on the keyed backend. */
 	private transient DefaultKeyedStateStore keyedStateStore;
 
+	/** Validates the current key belongs to the current subtask. */
+	private transient KeyGroupRangeValidator keyGroupRangeValidator;
+
 	// ---------------- operator state ------------------
 
 	/** Operator state backend / store. */
@@ -232,6 +237,7 @@ public abstract class AbstractStreamOperator<OUT>
 
 		stateKeySelector1 = config.getStatePartitioner(0, getUserCodeClassloader());
 		stateKeySelector2 = config.getStatePartitioner(1, getUserCodeClassloader());
+		keyGroupRangeValidator = new KeyGroupRangeValidator(runtimeContext);
 	}
 
 	@Override
@@ -627,6 +633,16 @@ public abstract class AbstractStreamOperator<OUT>
 	private <T> void setKeyContextElement(StreamRecord<T> record, KeySelector<T, ?> selector) throws Exception {
 		if (selector != null) {
 			Object key = selector.getKey(record.getValue());
+			if (!keyGroupRangeValidator.isOnProperSubtask(key)) {
+				throw new IllegalStateException(String.format("The current record has been assigned to subtask %d, " +
+					"but it should have been routed to a different subtask based on its key. This error typically " +
+					"implies one of two things has gone wrong. 1) The key object, of type %s, does not have stable " +
+					"equals and hashCode implementations. Please verify that the class overrides Object `equals` " +
+					"and `hashCode` methods. Note that this means arrays of any type are not allowed as keys. 2) " +
+					"Your application contains improper usage of `DataStreamUtil#reinterpretAsKeyedStream`, if so, " +
+					"please replace its usage with `DataStream#keyBy`.",
+					runtimeContext.getIndexOfThisSubtask(), key.getClass().getName()));
+			}
 			setCurrentKey(key);
 		}
 	}
@@ -830,5 +846,31 @@ public abstract class AbstractStreamOperator<OUT>
 	public int numEventTimeTimers() {
 		return timeServiceManager == null ? 0 :
 			timeServiceManager.numEventTimeTimers();
+	}
+
+	/**
+	 * Validates the current key belongs to the current subtask.
+	 *
+	 *<p>We eagerly extract the necessary metadata from the
+	 * {@link RuntimeContext} to avoid multiple virtual method calls
+	 * on each record.
+	 */
+	private static final class KeyGroupRangeValidator {
+		private final int maxParallelism;
+
+		private final int parallelism;
+
+		private final int indexOfCurrentSubtask;
+
+		KeyGroupRangeValidator(RuntimeContext runtimeContext) {
+			this.maxParallelism = runtimeContext.getMaxNumberOfParallelSubtasks();
+			this.parallelism = runtimeContext.getNumberOfParallelSubtasks();
+			this.indexOfCurrentSubtask = runtimeContext.getIndexOfThisSubtask();
+		}
+
+		boolean isOnProperSubtask(Object key) {
+			int expectedSubtask = KeyGroupRangeAssignment.assignKeyToParallelOperator(key, maxParallelism, parallelism);
+			return expectedSubtask == indexOfCurrentSubtask;
+		}
 	}
 }

@@ -658,6 +658,32 @@ public class AbstractStreamOperatorTest {
 	}
 
 	/**
+	 * Tests that the operator throws an IllegalStateException when
+	 * a subtask processes a record with a key outside its assigned
+	 * key group range.
+	 */
+	@Test(expected = IllegalStateException.class)
+	public void testKeyGroupRangeCheck() throws Exception {
+		TestOperator testOperator = new TestOperator();
+
+		int maxParallelism = 4;
+		KeyedOneInputStreamOperatorTestHarness<Integer, Tuple2<Integer, String>, String> testHarness =
+			new KeyedOneInputStreamOperatorTestHarness<>(
+				testOperator,
+				new TestKeySelector(),
+				BasicTypeInfo.INT_TYPE_INFO,
+				4,
+				2,
+				1);
+
+		KeyGroupRange subKeyGroupRange = new KeyGroupRange(0, (maxParallelism / 2) - 1);
+		int key = getKeyInKeyGroupRange(subKeyGroupRange, maxParallelism);
+
+		testHarness.open();
+		testHarness.processElement(new Tuple2<>(key, "hello"), 0);
+	}
+
+	/**
 	 * Extracts the result values form the test harness and clear the output queue.
 	 */
 	@SuppressWarnings({"unchecked", "rawtypes"})
