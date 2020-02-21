@@ -22,6 +22,8 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.ClosureCleaner;
 import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
@@ -67,5 +69,12 @@ public class KeyedTwoInputStreamOperatorTestHarness<K, IN1, IN2, OUT>
 		} else {
 			throw new UnsupportedOperationException();
 		}
+	}
+
+	public KeyGroupRange getKeyGroupRange() {
+		return KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(
+			environment.getTaskInfo().getMaxNumberOfParallelSubtasks(),
+			environment.getTaskInfo().getNumberOfParallelSubtasks(),
+			environment.getTaskInfo().getIndexOfThisSubtask());
 	}
 }

@@ -27,6 +27,8 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.KeyedStateFunction;
 import org.apache.flink.streaming.api.functions.co.KeyedBroadcastProcessFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -50,6 +52,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Function;
@@ -71,6 +74,13 @@ public class CoBroadcastWithKeyedOperatorTest {
 					BasicTypeInfo.INT_TYPE_INFO
 			);
 
+	private static final MapStateDescriptor<Integer, Integer> INT_STATE_DESCRIPTOR =
+		new MapStateDescriptor<>(
+			"broadcast-state",
+			BasicTypeInfo.INT_TYPE_INFO,
+			BasicTypeInfo.INT_TYPE_INFO
+		);
+
 	@Test
 	public void testKeyQuerying() throws Exception {
 
@@ -81,7 +91,7 @@ public class CoBroadcastWithKeyedOperatorTest {
 				Tuple2<Integer, String> value,
 				ReadOnlyContext ctx,
 				Collector<String> out) throws Exception {
-				assertTrue("Did not get expected key.", ctx.getCurrentKey().equals(value.f0));
+				assertEquals("Did not get expected key.", ctx.getCurrentKey(), value.f0);
 
 				// we check that we receive this output, to ensure that the assert was actually checked
 				out.collect(value.f1);
@@ -472,29 +482,33 @@ public class CoBroadcastWithKeyedOperatorTest {
 
 	@Test
 	public void testScaleUp() throws Exception {
-		final Set<String> keysToRegister = new HashSet<>();
-		keysToRegister.add("test1");
-		keysToRegister.add("test2");
-		keysToRegister.add("test3");
+		final Set<Integer> keysToRegister = new HashSet<>();
+		keysToRegister.add(1);
+		keysToRegister.add(2);
+		keysToRegister.add(3);
 
 		final OperatorSubtaskState mergedSnapshot;
 
 		try (
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness1 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				TwoInputStreamOperatorTestHarness<Integer, Integer, String> testHarness1 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						2,
-						0);
+						0,
+						null,
+						Collections.singletonList(INT_STATE_DESCRIPTOR));
 
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness2 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				TwoInputStreamOperatorTestHarness<Integer, Integer, String> testHarness2 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						2,
-						1)
+						1,
+						null,
+						Collections.singletonList(INT_STATE_DESCRIPTOR));
 
 		) {
 
@@ -509,9 +523,9 @@ public class CoBroadcastWithKeyedOperatorTest {
 		}
 
 		final Set<String> expected = new HashSet<>(3);
-		expected.add("test1=3");
-		expected.add("test2=3");
-		expected.add("test3=3");
+		expected.add("1=3");
+		expected.add("2=3");
+		expected.add("3=3");
 
 		OperatorSubtaskState operatorSubtaskState1 = repartitionInitState(mergedSnapshot, 10, 2, 3, 0);
 		OperatorSubtaskState operatorSubtaskState2 = repartitionInitState(mergedSnapshot, 10, 2, 3, 1);
@@ -519,36 +533,39 @@ public class CoBroadcastWithKeyedOperatorTest {
 
 		try (
 
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness1 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				KeyedTwoInputStreamOperatorTestHarness<Integer, Integer, Integer, String> testHarness1 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						3,
 						0,
-						operatorSubtaskState1);
+						operatorSubtaskState1,
+						Collections.singletonList(INT_STATE_DESCRIPTOR));
 
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness2 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				KeyedTwoInputStreamOperatorTestHarness<Integer, Integer, Integer, String> testHarness2 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						3,
 						1,
-						operatorSubtaskState2);
+						operatorSubtaskState2,
+						Collections.singletonList(INT_STATE_DESCRIPTOR));
 
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness3 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				KeyedTwoInputStreamOperatorTestHarness<Integer, Integer, Integer, String> testHarness3 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						3,
 						2,
-						operatorSubtaskState3)
+						operatorSubtaskState3,
+						Collections.singletonList(INT_STATE_DESCRIPTOR))
 		) {
-			testHarness1.processElement1(new StreamRecord<>("trigger"));
-			testHarness2.processElement1(new StreamRecord<>("trigger"));
-			testHarness3.processElement1(new StreamRecord<>("trigger"));
+			testHarness1.processElement1(new StreamRecord<>(getKeyInKeyGroupRange(testHarness1.getKeyGroupRange(), 10)));
+			testHarness2.processElement1(new StreamRecord<>(getKeyInKeyGroupRange(testHarness2.getKeyGroupRange(), 10)));
+			testHarness3.processElement1(new StreamRecord<>(getKeyInKeyGroupRange(testHarness3.getKeyGroupRange(), 10)));
 
 			Queue<?> output1 = testHarness1.getOutput();
 			Queue<?> output2 = testHarness2.getOutput();
@@ -576,37 +593,43 @@ public class CoBroadcastWithKeyedOperatorTest {
 
 	@Test
 	public void testScaleDown() throws Exception {
-		final Set<String> keysToRegister = new HashSet<>();
-		keysToRegister.add("test1");
-		keysToRegister.add("test2");
-		keysToRegister.add("test3");
+		final Set<Integer> keysToRegister = new HashSet<>();
+		keysToRegister.add(1);
+		keysToRegister.add(2);
+		keysToRegister.add(3);
 
 		final OperatorSubtaskState mergedSnapshot;
 
 		try (
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness1 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				TwoInputStreamOperatorTestHarness<Integer, Integer, String> testHarness1 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						3,
-						0);
+						0,
+						null,
+						Collections.singletonList(INT_STATE_DESCRIPTOR));
 
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness2 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				TwoInputStreamOperatorTestHarness<Integer, Integer, String> testHarness2 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						3,
-						1);
+						1,
+						null,
+						Collections.singletonList(INT_STATE_DESCRIPTOR));
 
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness3 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				TwoInputStreamOperatorTestHarness<Integer, Integer, String> testHarness3 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						3,
-						2)
+						2,
+					null,
+						Collections.singletonList(INT_STATE_DESCRIPTOR))
 		) {
 
 			// make sure all operators have the same state
@@ -622,35 +645,37 @@ public class CoBroadcastWithKeyedOperatorTest {
 		}
 
 		final Set<String> expected = new HashSet<>(3);
-		expected.add("test1=3");
-		expected.add("test2=3");
-		expected.add("test3=3");
+		expected.add("1=3");
+		expected.add("2=3");
+		expected.add("3=3");
 
 		OperatorSubtaskState operatorSubtaskState1 = repartitionInitState(mergedSnapshot, 10, 3, 2, 0);
 		OperatorSubtaskState operatorSubtaskState2 = repartitionInitState(mergedSnapshot, 10, 3, 2, 1);
 
 		try (
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness1 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				KeyedTwoInputStreamOperatorTestHarness<Integer, Integer, Integer, String> testHarness1 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						2,
 						0,
-						operatorSubtaskState1);
+						operatorSubtaskState1,
+						Collections.singletonList(INT_STATE_DESCRIPTOR));
 
-				TwoInputStreamOperatorTestHarness<String, Integer, String> testHarness2 = getInitializedTestHarness(
-						BasicTypeInfo.STRING_TYPE_INFO,
+				KeyedTwoInputStreamOperatorTestHarness<Integer, Integer, Integer, String> testHarness2 = getInitializedTestHarness(
+						BasicTypeInfo.INT_TYPE_INFO,
 						new IdentityKeySelector<>(),
 						new TestFunctionWithOutput(keysToRegister),
 						10,
 						2,
 						1,
-						operatorSubtaskState2)
+						operatorSubtaskState2,
+						Collections.singletonList(INT_STATE_DESCRIPTOR))
 		) {
 
-			testHarness1.processElement1(new StreamRecord<>("trigger"));
-			testHarness2.processElement1(new StreamRecord<>("trigger"));
+			testHarness1.processElement1(new StreamRecord<>(getKeyInKeyGroupRange(testHarness1.getKeyGroupRange(), 10)));
+			testHarness2.processElement1(new StreamRecord<>(getKeyInKeyGroupRange(testHarness2.getKeyGroupRange(), 10)));
 
 			Queue<?> output1 = testHarness1.getOutput();
 			Queue<?> output2 = testHarness2.getOutput();
@@ -669,27 +694,27 @@ public class CoBroadcastWithKeyedOperatorTest {
 		}
 	}
 
-	private static class TestFunctionWithOutput extends KeyedBroadcastProcessFunction<String, String, Integer, String> {
+	private static class TestFunctionWithOutput extends KeyedBroadcastProcessFunction<Integer, Integer, Integer, String> {
 
 		private static final long serialVersionUID = 7496674620398203933L;
 
-		private final Set<String> keysToRegister;
+		private final Set<Integer> keysToRegister;
 
-		TestFunctionWithOutput(Set<String> keysToRegister) {
+		TestFunctionWithOutput(Set<Integer> keysToRegister) {
 			this.keysToRegister = Preconditions.checkNotNull(keysToRegister);
 		}
 
 		@Override
 		public void processBroadcastElement(Integer value, Context ctx, Collector<String> out) throws Exception {
 			// put an element in the broadcast state
-			for (String k : keysToRegister) {
-				ctx.getBroadcastState(STATE_DESCRIPTOR).put(k, value);
+			for (Integer k : keysToRegister) {
+				ctx.getBroadcastState(INT_STATE_DESCRIPTOR).put(k, value);
 			}
 		}
 
 		@Override
-		public void processElement(String value, ReadOnlyContext ctx, Collector<String> out) throws Exception {
-			for (Map.Entry<String, Integer> entry : ctx.getBroadcastState(STATE_DESCRIPTOR).immutableEntries()) {
+		public void processElement(Integer value, ReadOnlyContext ctx, Collector<String> out) throws Exception {
+			for (Map.Entry<Integer, Integer> entry : ctx.getBroadcastState(INT_STATE_DESCRIPTOR).immutableEntries()) {
 				out.collect(entry.toString());
 			}
 		}
@@ -772,7 +797,8 @@ public class CoBroadcastWithKeyedOperatorTest {
 				maxParallelism,
 				numTasks,
 				taskIdx,
-				null);
+				null,
+				Collections.singletonList(STATE_DESCRIPTOR));
 	}
 
 	private static OperatorSubtaskState repartitionInitState(
@@ -785,20 +811,21 @@ public class CoBroadcastWithKeyedOperatorTest {
 		return AbstractStreamOperatorTestHarness.repartitionOperatorState(initState, numKeyGroups, oldParallelism, newParallelism, subtaskIndex);
 	}
 
-	private static <KEY, IN1, IN2, OUT> TwoInputStreamOperatorTestHarness<IN1, IN2, OUT> getInitializedTestHarness(
+	private static <KEY, IN1, IN2, OUT> KeyedTwoInputStreamOperatorTestHarness<KEY, IN1, IN2, OUT> getInitializedTestHarness(
 			final TypeInformation<KEY> keyTypeInfo,
 			final KeySelector<IN1, KEY> keyKeySelector,
 			final KeyedBroadcastProcessFunction<KEY, IN1, IN2, OUT> function,
 			final int maxParallelism,
 			final int numTasks,
 			final int taskIdx,
-			final OperatorSubtaskState initState) throws Exception {
+			final OperatorSubtaskState initState,
+			final List<MapStateDescriptor<?, ?>> broadcastStateDescriptors) throws Exception {
 
-		final TwoInputStreamOperatorTestHarness<IN1, IN2, OUT>  testHarness =
+		final KeyedTwoInputStreamOperatorTestHarness<KEY, IN1, IN2, OUT>  testHarness =
 				new KeyedTwoInputStreamOperatorTestHarness<>(
 						new CoBroadcastWithKeyedOperator<>(
 								Preconditions.checkNotNull(function),
-								Collections.singletonList(STATE_DESCRIPTOR)),
+								broadcastStateDescriptors),
 						keyKeySelector,
 						null,
 						keyTypeInfo,
@@ -829,5 +856,14 @@ public class CoBroadcastWithKeyedOperatorTest {
 					.append(entry.getValue());
 		}
 		return builder.toString();
+	}
+
+	private static int getKeyInKeyGroupRange(KeyGroupRange range, int maxParallelism) {
+		Random rand = new Random(System.currentTimeMillis());
+		int result = rand.nextInt();
+		while (!range.contains(KeyGroupRangeAssignment.assignToKeyGroup(result, maxParallelism))) {
+			result = rand.nextInt();
+		}
+		return result;
 	}
 }
