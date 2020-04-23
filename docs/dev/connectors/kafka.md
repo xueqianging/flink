@@ -23,125 +23,59 @@ specific language governing permissions and limitations
 under the License.
 -->
 
+Flink provides an [Apache Kafka](https://kafka.apache.org.) Connector for reading data from and writing data to Kafka topics with exactly-once guaruntees.
+
 * This will be replaced by the TOC
 {:toc}
 
-This connector provides access to event streams served by [Apache Kafka](https://kafka.apache.org/).
+## Dependency
 
-Flink provides special Kafka Connectors for reading and writing data from/to Kafka topics.
-The Flink Kafka Consumer integrates with Flink's checkpointing mechanism to provide
-exactly-once processing semantics. To achieve that, Flink does not purely rely on Kafka's consumer group
-offset tracking, but tracks and checkpoints these offsets internally as well.
+This universal Kafka connector attempts to track the latest version of the Kafka client.
+The version of the client it uses may change between Flink releases.
+Modern Kafka clients are backwards compatible with broker versions 0.10.0 or later.
+For most users, the universal Kafka connector is appropriate.
+However for Kafka 0.11.x and 0.10.x versions, we recommend using dedicated ``0.11`` and ``0.10`` respectively.
+For details on Kafka compatibility, please refer to the [Kafka documentation](https://kafka.apache.org/protocol.html#protocol_compatibility).
 
-Please pick a package (maven artifact id) and class name for your use-case and environment.
-For most users, the `FlinkKafkaConsumer010` (part of `flink-connector-kafka`) is appropriate.
-
-<table class="table table-bordered">
-  <thead>
-    <tr>
-      <th class="text-left">Maven Dependency</th>
-      <th class="text-left">Supported since</th>
-      <th class="text-left">Consumer and <br>
-      Producer Class name</th>
-      <th class="text-left">Kafka version</th>
-      <th class="text-left">Notes</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-        <td>flink-connector-kafka-0.10{{ site.scala_version_suffix }}</td>
-        <td>1.2.0</td>
-        <td>FlinkKafkaConsumer010<br>
-        FlinkKafkaProducer010</td>
-        <td>0.10.x</td>
-        <td>This connector supports <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-32+-+Add+timestamps+to+Kafka+message">Kafka messages with timestamps</a> both for producing and consuming.</td>
-    </tr>
-    <tr>
-        <td>flink-connector-kafka-0.11{{ site.scala_version_suffix }}</td>
-        <td>1.4.0</td>
-        <td>FlinkKafkaConsumer011<br>
-        FlinkKafkaProducer011</td>
-        <td>0.11.x</td>
-        <td>Since 0.11.x Kafka does not support scala 2.10. This connector supports <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging">Kafka transactional messaging</a> to provide exactly once semantic for the producer.</td>
-    </tr>
-    <tr>
-        <td>flink-connector-kafka{{ site.scala_version_suffix }}</td>
-        <td>1.7.0</td>
-        <td>FlinkKafkaConsumer<br>
-        FlinkKafkaProducer</td>
-        <td>>= 1.0.0</td>
-        <td>
-        This universal Kafka connector attempts to track the latest version of the Kafka client.
-        The version of the client it uses may change between Flink releases. Starting with Flink 1.9 release, it uses the Kafka 2.2.0 client.
-        Modern Kafka clients are backwards compatible with broker versions 0.10.0 or later.
-        However for Kafka 0.11.x and 0.10.x versions, we recommend using dedicated
-        flink-connector-kafka-0.11{{ site.scala_version_suffix }} and flink-connector-kafka-0.10{{ site.scala_version_suffix }} respectively.
-        </td>
-    </tr>
-  </tbody>
-</table>
-
-Then, import the connector in your maven project:
-
+<div class="codetabs" markdown="1">
+<div data-lang="universal" markdown="1">
 {% highlight xml %}
 <dependency>
-  <groupId>org.apache.flink</groupId>
-  <artifactId>flink-connector-kafka{{ site.scala_version_suffix }}</artifactId>
-  <version>{{ site.version }}</version>
+    <groupId>org.apache.flink</groupId>
+	<artifactId>flink-connector-kafka{{ site.scala_version_suffix }}</artifactId>
+	<version>{{ site.version }}</version>
+</dependency>
+{% endhighlight %} 
+</div>
+<div data-lang="011" markdown="1">
+{% highlight xml %}
+<dependency>
+	<groupId>org.apache.flink</groupId>
+	<artifactId>flink-connector-kafka-011{{ site.scala_version_suffix }}</artifactId>
+	<version>{{ site.version }}</version>
 </dependency>
 {% endhighlight %}
+</div>
+<div data-lang="010" markdown="1">
+{% highlight xml %}
+<dependency>
+	<groupId>org.apache.flink</groupId>
+	<artifactId>flink-connector-kafka-010{{ site.scala_version_suffix }}</artifactId>
+	<version>{{ site.version }}</version>
+</dependency>
+{% endhighlight %}
+<span class="label label-danger">Attention</span> The ``0.10`` sink does not support exactly-once writes to Kafka.
+</div>
+</div>
 
 Note that the streaming connectors are currently not part of the binary distribution.
 See how to link with them for cluster execution [here]({{ site.baseurl}}/dev/projectsetup/dependencies.html).
 
-## Installing Apache Kafka
-
-* Follow the instructions from [Kafka's quickstart](https://kafka.apache.org/documentation.html#quickstart) to download the code and launch a server (launching a Zookeeper and a Kafka server is required every time before starting the application).
-* If the Kafka and Zookeeper servers are running on a remote machine, then the `advertised.host.name` setting in the `config/server.properties` file must be set to the machine's IP address.
-
-## Kafka 1.0.0+ Connector
-
-Starting with Flink 1.7, there is a new universal Kafka connector that does not track a specific Kafka major version.
-Rather, it tracks the latest version of Kafka at the time of the Flink release.
-
-If your Kafka broker version is 1.0.0 or newer, you should use this Kafka connector.
-If you use an older version of Kafka (0.11 or 0.10), you should use the connector corresponding to the broker version.
-
-### Compatibility
-
-The universal Kafka connector is compatible with older and newer Kafka brokers through the compatibility guarantees of the Kafka client API and broker.
-It is compatible with broker versions 0.11.0 or newer, depending on the features used.
-For details on Kafka compatibility, please refer to the [Kafka documentation](https://kafka.apache.org/protocol.html#protocol_compatibility).
-
-### Migrating Kafka Connector from 0.11 to universal
-
-In order to perform the migration, see the [upgrading jobs and Flink versions guide]({{ site.baseurl }}/ops/upgrading.html)
-and:
-* Use Flink 1.9 or newer for the whole process.
-* Do not upgrade the Flink and operators at the same time.
-* Make sure that Kafka Consumer and/or Kafka Producer used in your job have assigned unique identifiers (`uid`):
-* Use stop with savepoint feature to take the savepoint (for example by using `stop --withSavepoint`)[CLI command]({{ site.baseurl }}/ops/cli.html).
-
-### Usage
-
-To use the universal Kafka connector add a dependency to it:
-
-{% highlight xml %}
-<dependency>
-  <groupId>org.apache.flink</groupId>
-  <artifactId>flink-connector-kafka{{ site.scala_version_suffix }}</artifactId>
-  <version>{{ site.version }}</version>
-</dependency>
-{% endhighlight %}
-
-Then instantiate the new source (`FlinkKafkaConsumer`) and sink (`FlinkKafkaProducer`).
-The API is backward compatible with the Kafka 0.11 connector,
-except of dropping specific Kafka version from the module and class names.
-
 ## Kafka Consumer
 
-Flink's Kafka consumer is called `FlinkKafkaConsumer010` (or 011 for Kafka 0.11.0.x versions, etc.
-or just `FlinkKafkaConsumer` for Kafka >= 1.0.0 versions). It provides access to one or more Kafka topics.
+Flink's Kafka consumer is called `FlinkKafkaConsumer` (or `FlinkKafkaConsumer011` for Kafka 0.11.x version,
+or just `FlinkKafkaConsumer010` for Kafka 0.10.x versions).
+It provides access to read from one or more Kafka topics.
 
 The constructor accepts the following arguments:
 
@@ -152,8 +86,6 @@ The constructor accepts the following arguments:
   - "bootstrap.servers" (comma separated list of Kafka brokers)
   - "group.id" the id of the consumer group
 
-Example:
-
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
 {% highlight java %}
@@ -161,7 +93,7 @@ Properties properties = new Properties();
 properties.setProperty("bootstrap.servers", "localhost:9092");
 properties.setProperty("group.id", "test");
 DataStream<String> stream = env
-	.addSource(new FlinkKafkaConsumer010<>("topic", new SimpleStringSchema(), properties));
+	.addSource(new FlinkKafkaConsumer<>("topic", new SimpleStringSchema(), properties));
 {% endhighlight %}
 </div>
 <div data-lang="scala" markdown="1">
@@ -170,26 +102,17 @@ val properties = new Properties()
 properties.setProperty("bootstrap.servers", "localhost:9092")
 properties.setProperty("group.id", "test")
 stream = env
-    .addSource(new FlinkKafkaConsumer010[String]("topic", new SimpleStringSchema(), properties))
-    .print()
+    .addSource(new FlinkKafkaConsumer[String]("topic", new SimpleStringSchema(), properties))
 {% endhighlight %}
 </div>
 </div>
 
 ### The `DeserializationSchema`
 
-The Flink Kafka Consumer needs to know how to turn the binary data in Kafka into Java/Scala objects. The
-`DeserializationSchema` allows users to specify such a schema. The `T deserialize(byte[] message)`
-method gets called for each Kafka message, passing the value from Kafka.
+The Flink Kafka Consumer needs to know how to turn the binary data in Kafka into Java/Scala objects.
+The `KafkaDeserializationSchema` allows users to specify such a schema. The `T deserialize(ConsumerRecord<byte[], byte[]> record)` method gets called for each Kafka message, passing the value from Kafka.
 
-It is usually helpful to start from the `AbstractDeserializationSchema`, which takes care of describing the
-produced Java/Scala type to Flink's type system. Users that implement a vanilla `DeserializationSchema` need
-to implement the `getProducedType(...)` method themselves.
-
-For accessing the key, value and metadata of the Kafka message, the `KafkaDeserializationSchema` has
-the following deserialize method `T deserialize(ConsumerRecord<byte[], byte[]> record)`.
-
-For convenience, Flink provides the following schemas:
+For convenience, Flink provides the following schemas out of the box:
 
 1. `TypeInformationSerializationSchema` (and `TypeInformationKeyValueSerializationSchema`) which creates
     a schema based on a Flink's `TypeInformation`. This is useful if the data is both written and read by Flink.
@@ -233,29 +156,20 @@ For convenience, Flink provides the following schemas:
 </div>
 </div>
 
-When encountering a corrupted message that cannot be deserialized for any reason, there
-are two options - either throwing an exception from the `deserialize(...)` method
-which will cause the job to fail and be restarted, or returning `null` to allow
-the Flink Kafka consumer to silently skip the corrupted message. Note that
-due to the consumer's fault tolerance (see below sections for more details),
-failing the job on the corrupted message will let the consumer attempt
-to deserialize the message again. Therefore, if deserialization still fails, the
-consumer will fall into a non-stop restart and fail loop on that corrupted
-message.
+When encountering a corrupted message that cannot be deserialized for any reason the deserialization schema should return null which will result in the record being skipped.
+Due to the consumer's fault tolerance (see below sections for more details), failing the job on the corrupted message will let the consumer attempt to deserialize the message again.
+Therefore, if deserialization still fails, the consumer will fall into a non-stop restart and fail loop on that corrupted message.
 
 ### Kafka Consumers Start Position Configuration
 
-The Flink Kafka Consumer allows configuring how the start position for Kafka
-partitions are determined.
-
-Example:
+The Flink Kafka Consumer allows configuring how the start position for Kafka partitions are determined.
 
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
 {% highlight java %}
 final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-FlinkKafkaConsumer010<String> myConsumer = new FlinkKafkaConsumer010<>(...);
+FlinkKafkaConsumer<String> myConsumer = new FlinkKafkaConsumer<>(...);
 myConsumer.setStartFromEarliest();     // start from the earliest record possible
 myConsumer.setStartFromLatest();       // start from the latest record
 myConsumer.setStartFromTimestamp(...); // start from specified epoch timestamp (milliseconds)
@@ -269,7 +183,7 @@ DataStream<String> stream = env.addSource(myConsumer);
 {% highlight scala %}
 val env = StreamExecutionEnvironment.getExecutionEnvironment()
 
-val myConsumer = new FlinkKafkaConsumer010[String](...)
+val myConsumer = new FlinkKafkaConsumer[String](...)
 myConsumer.setStartFromEarliest()      // start from the earliest record possible
 myConsumer.setStartFromLatest()        // start from the latest record
 myConsumer.setStartFromTimestamp(...)  // start from specified epoch timestamp (milliseconds)
@@ -344,27 +258,7 @@ the streaming program to the state of the latest checkpoint and re-consume the r
 stored in the checkpoint.
 
 The interval of drawing checkpoints therefore defines how much the program may have to go back at most, in case of a failure.
-
-To use fault tolerant Kafka Consumers, checkpointing of the topology needs to be enabled at the execution environment:
-
-<div class="codetabs" markdown="1">
-<div data-lang="java" markdown="1">
-{% highlight java %}
-final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-env.enableCheckpointing(5000); // checkpoint every 5000 msecs
-{% endhighlight %}
-</div>
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
-val env = StreamExecutionEnvironment.getExecutionEnvironment()
-env.enableCheckpointing(5000) // checkpoint every 5000 msecs
-{% endhighlight %}
-</div>
-</div>
-
-Also note that Flink can only restart the topology if enough processing slots are available to restart the topology.
-So if the topology fails due to loss of a TaskManager, there must still be enough slots available afterwards.
-Flink on YARN supports automatic restart of lost YARN containers.
+To use fault tolerant Kafka Consumers, checkpointing of the topology needs to be enabled in the [job]({{ site.baseurl }}/ops/config.html#execution-checkpointing-interval).
 
 If checkpointing is not enabled, the Kafka consumer will periodically commit the offsets to Zookeeper.
 
@@ -380,15 +274,10 @@ By default, partition discovery is disabled. To enable it, set a non-negative va
 for `flink.partition-discovery.interval-millis` in the provided properties config,
 representing the discovery interval in milliseconds. 
 
-<span class="label label-danger">Limitation</span> When the consumer is restored from a savepoint from Flink versions
-prior to Flink 1.3.x, partition discovery cannot be enabled on the restore run. If enabled, the restore would fail
-with an exception. In this case, in order to use partition discovery, please first take a savepoint in Flink 1.3.x and
-then restore again from that.
-
 #### Topic discovery
 
 At a higher-level, the Flink Kafka Consumer is also capable of discovering topics, based on pattern matching on the
-topic names using regular expressions. See the below for an example:
+topic names using regular expressions.
 
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
@@ -399,7 +288,7 @@ Properties properties = new Properties();
 properties.setProperty("bootstrap.servers", "localhost:9092");
 properties.setProperty("group.id", "test");
 
-FlinkKafkaConsumer011<String> myConsumer = new FlinkKafkaConsumer011<>(
+FlinkKafkaConsumer<String> myConsumer = new FlinkKafkaConsumer<>(
     java.util.regex.Pattern.compile("test-topic-[0-9]"),
     new SimpleStringSchema(),
     properties);
@@ -416,7 +305,7 @@ val properties = new Properties()
 properties.setProperty("bootstrap.servers", "localhost:9092")
 properties.setProperty("group.id", "test")
 
-val myConsumer = new FlinkKafkaConsumer010[String](
+val myConsumer = new FlinkKafkaConsumer[String](
   java.util.regex.Pattern.compile("test-topic-[0-9]"),
   new SimpleStringSchema,
   properties)
@@ -482,13 +371,11 @@ Properties properties = new Properties();
 properties.setProperty("bootstrap.servers", "localhost:9092");
 properties.setProperty("group.id", "test");
 
-FlinkKafkaConsumer010<String> myConsumer =
-    new FlinkKafkaConsumer010<>("topic", new SimpleStringSchema(), properties);
+FlinkKafkaConsumer<String> myConsumer =
+    new FlinkKafkaConsumer<>("topic", new SimpleStringSchema(), properties);
 myConsumer.assignTimestampsAndWatermarks(new CustomWatermarkEmitter());
 
-DataStream<String> stream = env
-	.addSource(myConsumer)
-	.print();
+DataStream<String> stream = env.addSource(myConsumer);
 {% endhighlight %}
 </div>
 <div data-lang="scala" markdown="1">
@@ -499,9 +386,8 @@ properties.setProperty("group.id", "test")
 
 val myConsumer = new FlinkKafkaConsumer010[String]("topic", new SimpleStringSchema(), properties)
 myConsumer.assignTimestampsAndWatermarks(new CustomWatermarkEmitter())
-stream = env
-    .addSource(myConsumer)
-    .print()
+
+val stream = env.addSource(myConsumer)
 {% endhighlight %}
 </div>
 </div>
@@ -524,23 +410,19 @@ In the meanwhile, a possible workaround is to send *heartbeat messages* to all c
 
 ## Kafka Producer
 
-Flink’s Kafka Producer is called `FlinkKafkaProducer011` (or `010` for Kafka 0.10.0.x versions, etc. or just `FlinkKafkaProducer` for Kafka >= 1.0.0 versions).
+Flink’s Kafka Producer is called `FlinkKafkaProducer` (or `010` for Kafka 0.10.x versions or `FlinkKafkaProducer` for Kafka 0.11.x versions).
 It allows writing a stream of records to one or more Kafka topics.
-
-Example:
 
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
 {% highlight java %}
 DataStream<String> stream = ...;
 
-FlinkKafkaProducer011<String> myProducer = new FlinkKafkaProducer011<String>(
+FlinkKafkaProducer<String> myProducer = new FlinkKafkaProducer<String>(
         "localhost:9092",            // broker list
         "my-topic",                  // target topic
         new SimpleStringSchema());   // serialization schema
 
-// versions 0.10+ allow attaching the records' event timestamp when writing them to Kafka;
-// this method is not available for earlier Kafka versions
 myProducer.setWriteTimestampToKafka(true);
 
 stream.addSink(myProducer);
@@ -550,13 +432,11 @@ stream.addSink(myProducer);
 {% highlight scala %}
 val stream: DataStream[String] = ...
 
-val myProducer = new FlinkKafkaProducer011[String](
+val myProducer = new FlinkKafkaProducer[String](
         "localhost:9092",         // broker list
         "my-topic",               // target topic
         new SimpleStringSchema)   // serialization schema
 
-// versions 0.10+ allow attaching the records' event timestamp when writing them to Kafka;
-// this method is not available for earlier Kafka versions
 myProducer.setWriteTimestampToKafka(true)
 
 stream.addSink(myProducer)
@@ -602,39 +482,8 @@ the `FlinkFixedPartitioner` is used instead.
 
 ### Kafka Producers and Fault Tolerance
 
-#### Kafka 0.10
-
-With Flink's checkpointing enabled, the `FlinkKafkaProducer010`
-can provide at-least-once delivery guarantees.
-
-Besides enabling Flink's checkpointing, you should also configure the setter
-methods `setLogFailuresOnly(boolean)` and `setFlushOnCheckpoint(boolean)` appropriately.
-
- * `setLogFailuresOnly(boolean)`: by default, this is set to `false`.
- Enabling this will let the producer only log failures
- instead of catching and rethrowing them. This essentially accounts the record
- to have succeeded, even if it was never written to the target Kafka topic. This
- must be disabled for at-least-once.
- * `setFlushOnCheckpoint(boolean)`: by default, this is set to `true`.
- With this enabled, Flink's checkpoints will wait for any
- on-the-fly records at the time of the checkpoint to be acknowledged by Kafka before
- succeeding the checkpoint. This ensures that all records before the checkpoint have
- been written to Kafka. This must be enabled for at-least-once.
- 
-In conclusion, the Kafka producer by default has at-least-once guarantees for versions
-0.10, with `setLogFailureOnly` set to `false` and `setFlushOnCheckpoint` set
-to `true`.
-
-**Note**: By default, the number of retries is set to "0". This means that when `setLogFailuresOnly` is set to `false`,
-the producer fails immediately on errors, including leader changes. The value is set to "0" by default to avoid
-duplicate messages in the target topic that are caused by retries. For most production environments with frequent broker changes,
-we recommend setting the number of retries to a higher value.
-
-**Note**: There is currently no transactional producer for Kafka, so Flink can not guarantee exactly-once delivery
-into a Kafka topic.
-
-#### Kafka 0.11 and newer
-
+<div class="codetabs" markdown="1">
+<div data-lang="Universal and 011" markdown="1">
 With Flink's checkpointing enabled, the `FlinkKafkaProducer011` (`FlinkKafkaProducer` for Kafka >= 1.0.0 versions) can provide
 exactly-once delivery guarantees.
 
@@ -695,6 +544,40 @@ event of failure of Flink application before first checkpoint, after restarting 
 is no information in the system about previous pool sizes. Thus it is unsafe to scale down Flink
 application before first checkpoint completes, by factor larger than `FlinkKafkaProducer011.SAFE_SCALE_DOWN_FACTOR`.
 
+</div>
+<div data-lang="010" markdown="1">
+With Flink's checkpointing enabled, the `FlinkKafkaProducer010`
+can provide at-least-once delivery guarantees.
+
+Besides enabling Flink's checkpointing, you should also configure the setter
+methods `setLogFailuresOnly(boolean)` and `setFlushOnCheckpoint(boolean)` appropriately.
+
+ * `setLogFailuresOnly(boolean)`: by default, this is set to `false`.
+ Enabling this will let the producer only log failures
+ instead of catching and rethrowing them. This essentially accounts the record
+ to have succeeded, even if it was never written to the target Kafka topic. This
+ must be disabled for at-least-once.
+ * `setFlushOnCheckpoint(boolean)`: by default, this is set to `true`.
+ With this enabled, Flink's checkpoints will wait for any
+ on-the-fly records at the time of the checkpoint to be acknowledged by Kafka before
+ succeeding the checkpoint. This ensures that all records before the checkpoint have
+ been written to Kafka. This must be enabled for at-least-once.
+ 
+In conclusion, the Kafka producer by default has at-least-once guarantees for versions
+0.10, with `setLogFailureOnly` set to `false` and `setFlushOnCheckpoint` set
+to `true`.
+
+**Note**: By default, the number of retries is set to "0". This means that when `setLogFailuresOnly` is set to `false`,
+the producer fails immediately on errors, including leader changes. The value is set to "0" by default to avoid
+duplicate messages in the target topic that are caused by retries. For most production environments with frequent broker changes,
+we recommend setting the number of retries to a higher value.
+
+**Note**: There is currently no transactional producer for Kafka, so Flink can not guarantee exactly-once delivery
+into a Kafka topic.
+
+</div>
+</div>
+
 ## Using Kafka timestamps and Flink event time in Kafka 0.10
 
 Since Apache Kafka 0.10+, Kafka's messages can carry
@@ -729,7 +612,7 @@ config.setWriteTimestampToKafka(true);
 
 
 
-## Kafka Connector metrics
+## Kafka Connector Metrics
 
 Flink's Kafka connectors provide some metrics through Flink's [metrics system]({{ site.baseurl }}/monitoring/metrics.html) to analyze
 the behavior of the connector.
@@ -775,6 +658,16 @@ A mismatch in service name between client and server configuration will cause th
 
 For more information on Flink configuration for Kerberos security, please see [here]({{ site.baseurl}}/ops/config.html).
 You can also find [here]({{ site.baseurl}}/ops/security-kerberos.html) further details on how Flink internally setups Kerberos-based security.
+
+## Migrating Kafka Connector from 0.11 to universal
+
+In order to perform the migration, see the [upgrading jobs and Flink versions guide]({{ site.baseurl }}/ops/upgrading.html)
+and:
+* Use Flink 1.9 or newer for the whole process.
+* Do not upgrade the Flink and operators at the same time.
+* Make sure that Kafka Consumer and/or Kafka Producer used in your job have assigned unique identifiers (`uid`):
+* Use stop with savepoint feature to take the savepoint (for example by using `stop --withSavepoint`)[CLI command]({{ site.baseurl }}/ops/cli.html).
+
 
 ## Troubleshooting
 
