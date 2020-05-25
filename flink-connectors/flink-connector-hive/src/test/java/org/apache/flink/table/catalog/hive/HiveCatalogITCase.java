@@ -27,7 +27,6 @@ import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.api.Types;
-import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTableBuilder;
 import org.apache.flink.table.catalog.ObjectPath;
@@ -51,8 +50,10 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileReader;
+import java.io.PrintStream;
 import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -61,6 +62,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 
+import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_RESOURCE_DEFAULT_PARALLELISM;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
@@ -235,7 +237,7 @@ public class HiveCatalogITCase {
 		// similar to CatalogTableITCase::testReadWriteCsvUsingDDL but uses HiveCatalog
 		EnvironmentSettings settings = EnvironmentSettings.newInstance().useBlinkPlanner().inStreamingMode().build();
 		TableEnvironment tableEnv = TableEnvironment.create(settings);
-		tableEnv.getConfig().getConfiguration().setInteger(ExecutionConfigOptions.TABLE_EXEC_RESOURCE_DEFAULT_PARALLELISM, 1);
+		tableEnv.getConfig().getConfiguration().setInteger(TABLE_EXEC_RESOURCE_DEFAULT_PARALLELISM, 1);
 
 		tableEnv.registerCatalog("myhive", hiveCatalog);
 		tableEnv.useCatalog("myhive");
@@ -259,5 +261,40 @@ public class HiveCatalogITCase {
 		String expected = "2019-12-12 00:00:05.0,2019-12-12 00:00:04.004001,3,50.00\n" +
 				"2019-12-12 00:00:10.0,2019-12-12 00:00:06.006001,2,5.33\n";
 		assertEquals(expected, FileUtils.readFileUtf8(new File(new URI(sinkPath))));
+	}
+
+	@Test
+	public void testNewTableFactory() {
+		TableEnvironment tEnv = TableEnvironment.create(
+				EnvironmentSettings.newInstance().inBatchMode().build());
+		tEnv.registerCatalog("myhive", hiveCatalog);
+		tEnv.useCatalog("myhive");
+		tEnv.getConfig().getConfiguration().set(TABLE_EXEC_RESOURCE_DEFAULT_PARALLELISM, 1);
+
+		String path = this.getClass().getResource("/csv/test.csv").getPath();
+
+		PrintStream originalSystemOut = System.out;
+		try {
+			ByteArrayOutputStream arrayOutputStream = new ByteArrayOutputStream();
+			System.setOut(new PrintStream(arrayOutputStream));
+
+			tEnv.executeSql("create table csv_table (name String, age Int) with (" +
+					"'connector.type' = 'filesystem'," +
+					"'connector.path' = 'file://" + path + "'," +
+					"'format.type' = 'csv')");
+			tEnv.executeSql("create table print_table (name String, age Int) with ('connector' = 'print')");
+
+			TableEnvUtil.execInsertSqlAndWaitResult(tEnv, "insert into print_table select * from csv_table");
+
+			// assert query result
+			assertEquals("+I(1,1)\n+I(2,2)\n+I(3,3)\n", arrayOutputStream.toString());
+		} finally {
+			if (System.out != originalSystemOut) {
+				System.out.close();
+			}
+			System.setOut(originalSystemOut);
+			tEnv.executeSql("DROP TABLE csv_table");
+			tEnv.executeSql("DROP TABLE print_table");
+		}
 	}
 }
