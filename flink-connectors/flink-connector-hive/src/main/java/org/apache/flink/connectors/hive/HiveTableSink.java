@@ -215,7 +215,6 @@ public class HiveTableSink implements AppendStreamTableSink, PartitionableTableS
 						overwrite,
 						dataStream,
 						builder,
-						listener,
 						msFactory);
 			}
 		} catch (TException e) {

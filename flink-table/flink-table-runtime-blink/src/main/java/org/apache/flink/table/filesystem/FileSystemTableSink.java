@@ -175,7 +175,6 @@ public class FileSystemTableSink implements
 					overwrite,
 					dataStream,
 					bucketsBuilder,
-					listener,
 					metaStoreFactory);
 		}
 	}
@@ -188,14 +187,13 @@ public class FileSystemTableSink implements
 			boolean overwrite,
 			DataStream<RowData> inputStream,
 			BucketsBuilder<RowData, ?, ? extends BucketsBuilder<RowData, ?, ?>> bucketsBuilder,
-			InactiveBucketListener listener,
 			TableMetaStoreFactory msFactory) {
 		if (overwrite) {
 			throw new IllegalStateException("Streaming mode not support overwrite.");
 		}
 
 		StreamingFileWriter fileWriter = new StreamingFileWriter(
-				BucketsBuilder.DEFAULT_BUCKET_CHECK_INTERVAL, bucketsBuilder, listener);
+				BucketsBuilder.DEFAULT_BUCKET_CHECK_INTERVAL, bucketsBuilder);
 		DataStream<CommitMessage> writerStream = inputStream.transform(
 				StreamingFileWriter.class.getSimpleName(),
 				TypeExtractor.createTypeInfo(CommitMessage.class),

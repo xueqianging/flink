@@ -121,6 +121,11 @@ public class Buckets<IN, BucketID> {
 		this.maxPartCounter = 0L;
 	}
 
+	@Nullable
+	public BucketLifeCycleListener<IN, BucketID> getBucketLifeCycleListener() {
+		return bucketLifeCycleListener;
+	}
+
 	/**
 	 * Initializes the state after recovery from a failure.
 	 *
