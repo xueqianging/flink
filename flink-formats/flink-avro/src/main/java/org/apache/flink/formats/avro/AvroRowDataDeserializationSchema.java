@@ -95,7 +95,7 @@ public class AvroRowDataDeserializationSchema implements DeserializationSchema<R
 	/**
 	 * Runtime instance that performs the actual work.
 	 */
-	private final DeserializationRuntimeConverter runtimeConverter;
+	private transient DeserializationRuntimeConverter runtimeConverter;
 
 	/**
 	 * Record to deserialize byte array.
@@ -128,20 +128,24 @@ public class AvroRowDataDeserializationSchema implements DeserializationSchema<R
 			TypeInformation<RowData> typeInfo) {
 		this.rowType = rowType;
 		this.typeInfo = typeInfo;
-		this.runtimeConverter = createRowConverter(rowType);
 	}
 
 	@Override
-	public void open(InitializationContext context) throws Exception {
+	public void open(InitializationContext context) {
 		final Schema schema = AvroSchemaConverter.convertToSchema(rowType);
 		this.record = new GenericData.Record(schema);
 		this.datumReader = new SpecificDatumReader<>(schema);
 		this.inputStream = new MutableByteArrayInputStream();
 		this.decoder = DecoderFactory.get().binaryDecoder(this.inputStream, null);
+		this.runtimeConverter = createRowConverter(rowType);
 	}
 
 	@Override
 	public RowData deserialize(byte[] message) throws IOException {
+		if (runtimeConverter == null) {
+			open(null);
+		}
+
 		try {
 			inputStream.setBuffer(message);
 			record = datumReader.read(record, decoder);

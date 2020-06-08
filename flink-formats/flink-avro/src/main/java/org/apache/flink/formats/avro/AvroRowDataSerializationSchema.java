@@ -72,7 +72,7 @@ public class AvroRowDataSerializationSchema implements SerializationSchema<RowDa
 	/**
 	 * Runtime instance that performs the actual work.
 	 */
-	private final SerializationRuntimeConverter runtimeConverter;
+	private transient SerializationRuntimeConverter runtimeConverter;
 
 	/**
 	 * Writer to serialize Avro record into a Avro bytes.
@@ -94,12 +94,12 @@ public class AvroRowDataSerializationSchema implements SerializationSchema<RowDa
 	 */
 	public AvroRowDataSerializationSchema(RowType rowType) {
 		this.rowType = Preconditions.checkNotNull(rowType, "RowType cannot be null.");
-		this.runtimeConverter = createRowConverter(rowType);
 	}
 
 	@Override
-	public void open(InitializationContext context) throws Exception {
+	public void open(InitializationContext context) {
 		final Schema schema = AvroSchemaConverter.convertToSchema(rowType);
+		runtimeConverter = createRowConverter(rowType);
 		datumWriter = new SpecificDatumWriter<>(schema);
 		arrayOutputStream = new ByteArrayOutputStream();
 		encoder = EncoderFactory.get().binaryEncoder(arrayOutputStream, null);
@@ -107,6 +107,10 @@ public class AvroRowDataSerializationSchema implements SerializationSchema<RowDa
 
 	@Override
 	public byte[] serialize(RowData row) {
+		if (runtimeConverter == null) {
+			open(null);
+		}
+
 		try {
 			// convert to record
 			final GenericRecord record = (GenericRecord) runtimeConverter.convert(row);

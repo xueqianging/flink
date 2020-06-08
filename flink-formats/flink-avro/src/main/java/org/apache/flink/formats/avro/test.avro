@@ -1,0 +1,10 @@
+{
+      "type": "record",
+      "namespace":
+      "name": "newOrder",
+      "fields" : [
+        {"name": "user_id", "type": "string"},
+        {"name": "order_amount", "type": "double"},
+        {"name": "log_ts", "type": "long", "logicalType": "timestamp-millis"
+      ]
+}
