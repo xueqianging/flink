@@ -37,6 +37,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.operators.testutils.MockEnvironment;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.testutils.statemigration.TestType;
 import org.apache.flink.util.ExceptionUtils;
@@ -73,6 +74,8 @@ import static org.junit.Assert.fail;
 public abstract class StateBackendMigrationTestBase<B extends AbstractStateBackend> extends TestLogger {
 
 	protected abstract B getStateBackend() throws Exception;
+
+	protected abstract SnapshotStorage getSnapshotStorage() throws Exception;
 
 	@Rule
 	public final TemporaryFolder tempFolder = new TemporaryFolder();
@@ -1168,7 +1171,7 @@ public abstract class StateBackendMigrationTestBase<B extends AbstractStateBacke
 
 	private CheckpointStreamFactory createStreamFactory() throws Exception {
 		if (checkpointStorageLocation == null) {
-			CheckpointStorage checkpointStorage = getStateBackend()
+			CheckpointStorage checkpointStorage = getSnapshotStorage()
 				.createCheckpointStorage(new JobID());
 			checkpointStorage.initializeBaseLocations();
 			checkpointStorageLocation = checkpointStorage

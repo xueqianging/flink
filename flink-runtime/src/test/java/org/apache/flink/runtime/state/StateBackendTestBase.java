@@ -75,6 +75,7 @@ import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.shaded.guava18.com.google.common.base.Joiner;
@@ -164,11 +165,13 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 	protected abstract B getStateBackend() throws Exception;
 
+	protected abstract SnapshotStorage getSnapshotStorage() throws Exception;
+
 	protected abstract boolean isSerializerPresenceRequiredOnRestore();
 
 	protected CheckpointStreamFactory createStreamFactory() throws Exception {
 		if (checkpointStreamFactory == null) {
-			checkpointStreamFactory = getStateBackend()
+			checkpointStreamFactory = getSnapshotStorage()
 					.createCheckpointStorage(new JobID())
 					.resolveCheckpointStorageLocation(1L, CheckpointStorageLocationReference.getDefault());
 		}

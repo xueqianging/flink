@@ -75,6 +75,7 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.types.Either;
@@ -453,6 +454,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			CheckpointIDCounter checkpointIDCounter,
 			CompletedCheckpointStore checkpointStore,
 			StateBackend checkpointStateBackend,
+			SnapshotStorage snapshotStorage,
 			CheckpointStatsTracker statsTracker) {
 
 		checkState(state == JobStatus.CREATED, "Job must be in CREATED state");
@@ -497,7 +499,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			operatorCoordinators,
 			checkpointIDCounter,
 			checkpointStore,
-			checkpointStateBackend,
+			snapshotStorage,
 			ioExecutor,
 			new ScheduledExecutorServiceAdapter(checkpointCoordinatorTimer),
 			SharedStateRegistry.DEFAULT_FACTORY,

@@ -168,6 +168,7 @@ public class ExecutionGraphCheckpointCoordinatorTest extends TestLogger {
 				counter,
 				store,
 				new MemoryStateBackend(),
+				new MemoryStateBackend(),
 				CheckpointStatsTrackerTest.createTestTracker());
 
 		return executionGraph;

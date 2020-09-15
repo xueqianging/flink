@@ -135,6 +135,7 @@ public class ArchivedExecutionGraphTest extends TestLogger {
 			new StandaloneCheckpointIDCounter(),
 			new StandaloneCompletedCheckpointStore(1),
 			new MemoryStateBackend(),
+			new MemoryStateBackend(),
 			statsTracker);
 
 		runtimeGraph.setJsonPlan("{}");

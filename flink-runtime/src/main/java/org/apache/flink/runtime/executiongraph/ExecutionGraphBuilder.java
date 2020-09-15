@@ -56,6 +56,8 @@ import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateBackendLoader;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorageLoader;
 import org.apache.flink.util.DynamicCodeLoadingException;
 import org.apache.flink.util.SerializedValue;
 
@@ -309,6 +311,32 @@ public class ExecutionGraphBuilder {
 				throw new JobExecutionException(jobId, "Could not instantiate configured state backend", e);
 			}
 
+			// load the snapshot storage from the application settings
+			final SnapshotStorage applicationConfiguredStorage;
+			final SerializedValue<SnapshotStorage> serializedStorage = snapshotSettings.getDefaultSnapshotStorage();
+
+			if (serializedStorage == null) {
+				applicationConfiguredStorage = null;
+			}
+			else {
+				try {
+					applicationConfiguredStorage = serializedStorage.deserializeValue(classLoader);
+				} catch (IOException | ClassNotFoundException e) {
+					throw new JobExecutionException(jobId,
+						"Could not deserialize application-defined state backend.", e);
+				}
+			}
+
+			final SnapshotStorage rootStorage;
+			try {
+				rootStorage = SnapshotStorageLoader.fromApplicationOrConfigOrDefault(
+					applicationConfiguredStorage, snapshotSettings.getDefaultSavepointLocation(),
+					rootBackend, jobManagerConfig, classLoader, log);
+			}
+			catch (IllegalConfigurationException | IOException | DynamicCodeLoadingException e) {
+				throw new JobExecutionException(jobId, "Could not instantiate configured state backend", e);
+			}
+
 			// instantiate the user-defined checkpoint hooks
 
 			final SerializedValue<MasterTriggerRestoreHook.Factory[]> serializedHooks = snapshotSettings.getMasterHooks();
@@ -352,6 +380,7 @@ public class ExecutionGraphBuilder {
 				checkpointIdCounter,
 				completedCheckpoints,
 				rootBackend,
+				rootStorage,
 				checkpointStatsTracker);
 		}
 

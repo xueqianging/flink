@@ -22,9 +22,11 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.operators.util.CorruptConfigurationException;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.util.ClassLoaderUtil;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -86,6 +88,8 @@ public class StreamConfig implements Serializable {
 	private static final String CHECKPOINTING_ENABLED = "checkpointing";
 	private static final String CHECKPOINT_MODE = "checkpointMode";
 
+	private static final String SAVEPOINT_DIR = "savepointdir";
+	private static final String SNAPSHOT_STORAGE = "snapshotstorage";
 	private static final String STATE_BACKEND = "statebackend";
 	private static final String STATE_PARTITIONER = "statePartitioner";
 
@@ -469,7 +473,7 @@ public class StreamConfig implements Serializable {
 			try {
 				InstantiationUtil.writeObjectToConfig(backend, this.config, STATE_BACKEND);
 			} catch (Exception e) {
-				throw new StreamTaskException("Could not serialize stateHandle provider.", e);
+				throw new StreamTaskException("Could not serialize state backend.", e);
 			}
 		}
 	}
@@ -478,7 +482,43 @@ public class StreamConfig implements Serializable {
 		try {
 			return InstantiationUtil.readObjectFromConfig(this.config, STATE_BACKEND, cl);
 		} catch (Exception e) {
-			throw new StreamTaskException("Could not instantiate statehandle provider.", e);
+			throw new StreamTaskException("Could not instantiate state backend.", e);
+		}
+	}
+
+	public void setSnapshotStorage(SnapshotStorage backend) {
+		if (backend != null) {
+			try {
+				InstantiationUtil.writeObjectToConfig(backend, this.config, SNAPSHOT_STORAGE);
+			} catch (Exception e) {
+				throw new StreamTaskException("Could not serialize snapshot storage.", e);
+			}
+		}
+	}
+
+	public SnapshotStorage getSnapshotStorage(ClassLoader cl) {
+		try {
+			return InstantiationUtil.readObjectFromConfig(this.config, SNAPSHOT_STORAGE, cl);
+		} catch (Exception e) {
+			throw new StreamTaskException("Could not instantiate snapshot storage.", e);
+		}
+	}
+
+	public void setSavepointDir(Path backend) {
+		if (backend != null) {
+			try {
+				InstantiationUtil.writeObjectToConfig(backend, this.config, SAVEPOINT_DIR);
+			} catch (Exception e) {
+				throw new StreamTaskException("Could not serialize snapshot storage.", e);
+			}
+		}
+	}
+
+	public Path getSavepointDir(ClassLoader cl) {
+		try {
+			return InstantiationUtil.readObjectFromConfig(this.config, SAVEPOINT_DIR, cl);
+		} catch (Exception e) {
+			throw new StreamTaskException("Could not instantiate snapshot storage.", e);
 		}
 	}
 

@@ -44,6 +44,7 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.state.ttl.MockTtlTimeProvider;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -122,7 +123,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	// use this as default for tests
 	protected StateBackend stateBackend = new MemoryStateBackend();
 
-	private CheckpointStorage checkpointStorage = stateBackend.createCheckpointStorage(new JobID());
+	private CheckpointStorage checkpointStorage = new MemoryStateBackend().createCheckpointStorage(new JobID());
 
 	private final Object checkpointLock;
 
@@ -281,8 +282,18 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	public void setStateBackend(StateBackend stateBackend) {
 		this.stateBackend = stateBackend;
 
+		if (stateBackend instanceof SnapshotStorage) {
+			try {
+				this.checkpointStorage = ((SnapshotStorage) stateBackend).createCheckpointStorage(new JobID());
+			} catch (IOException e) {
+				throw new RuntimeException(e.getMessage(), e);
+			}
+		}
+	}
+
+	public void setSnapshotStorage(SnapshotStorage storage) {
 		try {
-			this.checkpointStorage = stateBackend.createCheckpointStorage(new JobID());
+			this.checkpointStorage = storage.createCheckpointStorage(new JobID());
 		} catch (IOException e) {
 			throw new RuntimeException(e.getMessage(), e);
 		}
@@ -467,7 +478,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	}
 
 	/**
-	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#initializeState()}.
+	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#initializeState(StreamTaskStateInitializer)})}.
 	 * Calls {@link org.apache.flink.streaming.api.operators.SetupableStreamOperator#setup(StreamTask, StreamConfig, Output)}
 	 * if it was not called before.
 	 *

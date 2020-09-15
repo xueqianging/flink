@@ -20,6 +20,7 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,6 +45,11 @@ public class MemoryStateBackendTest extends StateBackendTestBase<MemoryStateBack
 
 	@Override
 	protected MemoryStateBackend getStateBackend() {
+		return new MemoryStateBackend(useAsyncmode);
+	}
+
+	@Override
+	protected SnapshotStorage getSnapshotStorage() throws Exception {
 		return new MemoryStateBackend(useAsyncmode);
 	}
 

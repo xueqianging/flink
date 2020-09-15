@@ -96,8 +96,11 @@ import org.apache.flink.util.WrappingRuntimeException;
 
 import com.esotericsoftware.kryo.Serializer;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.io.Serializable;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -156,6 +159,9 @@ public class StreamExecutionEnvironment {
 
 	/** The state backend used for storing k/v state and state snapshots. */
 	private StateBackend defaultStateBackend;
+
+	/** The default savepoint directory for the cluster. */
+	private Path defaultSavepointDir;
 
 	/** The time characteristic used by the data streams. */
 	private TimeCharacteristic timeCharacteristic = DEFAULT_TIME_CHARACTERISTIC;
@@ -568,6 +574,53 @@ public class StreamExecutionEnvironment {
 	@PublicEvolving
 	public StateBackend getStateBackend() {
 		return defaultStateBackend;
+	}
+
+	/**
+	 * Sets the default savepoint location for a cluster.
+	 *
+	 * @param savepointLocation The default savepoint directory to use.
+	 * @return This StreamExecutionEnvironment itself, to allow chaining of function calls.
+	 */
+	@PublicEvolving
+	public StreamExecutionEnvironment setSavepointLocation(String savepointLocation) {
+		Preconditions.checkNotNull(savepointLocation);
+		this.defaultSavepointDir = new Path(savepointLocation);
+		return this;
+	}
+
+	/**
+	 * Sets the default savepoint location for a cluster.
+	 *
+	 * @param savepointLocation The default savepoint directory to use.
+	 * @return This StreamExecutionEnvironment itself, to allow chaining of function calls.
+	 */
+	@PublicEvolving
+	public StreamExecutionEnvironment setSavepointLocation(URI savepointLocation) {
+		Preconditions.checkNotNull(savepointLocation);
+		this.defaultSavepointDir = new Path(savepointLocation);
+		return this;
+	}
+
+	/**
+	 * Sets the default savepoint location for a cluster.
+	 *
+	 * @param savepointLocation The default savepoint directory to use.
+	 * @return This StreamExecutionEnvironment itself, to allow chaining of function calls.
+	 */
+	@PublicEvolving
+	public StreamExecutionEnvironment setSavepointLocation(Path savepointLocation) {
+		this.defaultSavepointDir = Preconditions.checkNotNull(savepointLocation);
+		return this;
+	}
+
+	/**
+	 * @return The default savepoint directory to use, or null if none is set.
+	 */
+	@Nullable
+	@PublicEvolving
+	public Path getSavepointLocation() {
+		return this.defaultSavepointDir;
 	}
 
 	/**
@@ -1885,6 +1938,7 @@ public class StreamExecutionEnvironment {
 		}
 		return new StreamGraphGenerator(transformations, config, checkpointCfg)
 			.setStateBackend(defaultStateBackend)
+			.setDefaultSavepointDir(defaultSavepointDir)
 			.setChaining(isChainingEnabled)
 			.setUserArtifacts(cacheFile)
 			.setTimeCharacteristic(timeCharacteristic)

@@ -26,8 +26,6 @@ import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.AbstractStateBackend;
-import org.apache.flink.runtime.state.CheckpointStorage;
-import org.apache.flink.runtime.state.CompletedCheckpointStorageLocation;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
@@ -88,14 +86,4 @@ public class TestSpyWrapperStateBackend extends AbstractStateBackend {
 			CloseableRegistry cancelStreamRegistry) throws Exception {
 			return spy(delegate.createOperatorStateBackend(env, operatorIdentifier, stateHandles, cancelStreamRegistry));
 		}
-
-	@Override
-	public CompletedCheckpointStorageLocation resolveCheckpoint(String externalPointer) throws IOException {
-		return spy(delegate.resolveCheckpoint(externalPointer));
-	}
-
-	@Override
-	public CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException {
-		return spy(delegate.createCheckpointStorage(jobId));
-	}
 }

@@ -71,6 +71,7 @@ import org.junit.rules.TemporaryFolder;
 import org.mockito.verification.VerificationMode;
 
 import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2482,7 +2483,7 @@ public class CheckpointCoordinatorTest extends TestLogger {
 				CheckpointCoordinatorConfiguration.builder().setMaxConcurrentCheckpoints(Integer.MAX_VALUE).build())
 			.setTimer(manuallyTriggeredScheduledExecutor)
 			.setCoordinatorsToCheckpoint(Collections.singleton(coordinatorCheckpointContext))
-			.setStateBackEnd(new MemoryStateBackend() {
+			.setSnapshotStorage(new MemoryStateBackend() {
 				private static final long serialVersionUID = 8134582566514272546L;
 
 				// Throw exception when finalizing the checkpoint.

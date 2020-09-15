@@ -19,6 +19,8 @@
 package org.apache.flink.runtime.state.ttl;
 
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
+import org.apache.flink.runtime.state.ttl.mock.MockSnapshotStorage;
 import org.apache.flink.runtime.state.ttl.mock.MockStateBackend;
 
 /** Test suite for mock state TTL. */
@@ -29,6 +31,11 @@ public class MockTtlStateTest extends TtlStateTestBase {
 			@Override
 			protected StateBackend createStateBackend() {
 				return new MockStateBackend();
+			}
+
+			@Override
+			protected SnapshotStorage createSnapshotStorage() {
+				return new MockSnapshotStorage();
 			}
 		};
 	}

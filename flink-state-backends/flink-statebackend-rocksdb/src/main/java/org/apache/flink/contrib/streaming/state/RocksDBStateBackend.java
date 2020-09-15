@@ -44,6 +44,7 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.DynamicCodeLoadingException;
@@ -90,7 +91,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * using the methods {@link #setPredefinedOptions(PredefinedOptions)} and
  * {@link #setRocksDBOptions(RocksDBOptionsFactory)}.
  */
-public class RocksDBStateBackend extends AbstractStateBackend implements ConfigurableStateBackend {
+public class RocksDBStateBackend extends AbstractStateBackend implements ConfigurableStateBackend, SnapshotStorage {
 
 	/**
 	 * The options to chose for the type of priority queue state.
@@ -117,8 +118,8 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 
 	// -- configuration values, set in the application / configuration
 
-	/** The state backend that we use for creating checkpoint streams. */
-	private final StateBackend checkpointStreamBackend;
+	/** The snapshot storage that we use for creating checkpoint streams. */
+	private final SnapshotStorage snapshotStorage;
 
 	/** Base paths for RocksDB directory, as configured.
 	 * Null if not yet set, in which case the configuration values will be used.
@@ -243,7 +244,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 	 * here where the snapshots from RocksDB would be stored.
 	 *
 	 * <p>The snapshots of the RocksDB state will be stored using the given backend's
-	 * {@link StateBackend#createCheckpointStorage(JobID)}.
+	 * {@link SnapshotStorage#createCheckpointStorage(JobID)}.
 	 *
 	 * @param checkpointStreamBackend The backend write the checkpoint streams to.
 	 */
@@ -257,13 +258,13 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 	 * here where the snapshots from RocksDB would be stored.
 	 *
 	 * <p>The snapshots of the RocksDB state will be stored using the given backend's
-	 * {@link StateBackend#createCheckpointStorage(JobID)}.
+	 * {@link SnapshotStorage#createCheckpointStorage(JobID)}.
 	 *
 	 * @param checkpointStreamBackend The backend write the checkpoint streams to.
 	 * @param enableIncrementalCheckpointing True if incremental checkpointing is enabled.
 	 */
 	public RocksDBStateBackend(StateBackend checkpointStreamBackend, TernaryBoolean enableIncrementalCheckpointing) {
-		this.checkpointStreamBackend = checkNotNull(checkpointStreamBackend);
+		this.snapshotStorage = asSnapshotStorage(checkNotNull(checkpointStreamBackend));
 		this.enableIncrementalCheckpointing = enableIncrementalCheckpointing;
 		this.numberOfTransferThreads = UNDEFINED_NUMBER_OF_TRANSFER_THREADS;
 		this.defaultMetricOptions = new RocksDBNativeMetricOptions();
@@ -296,10 +297,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 	 */
 	private RocksDBStateBackend(RocksDBStateBackend original, ReadableConfig config, ClassLoader classLoader) {
 		// reconfigure the state backend backing the streams
-		final StateBackend originalStreamBackend = original.checkpointStreamBackend;
-		this.checkpointStreamBackend = originalStreamBackend instanceof ConfigurableStateBackend ?
-				((ConfigurableStateBackend) originalStreamBackend).configure(config, classLoader) :
-				originalStreamBackend;
+		this.snapshotStorage = original.snapshotStorage.configure(config, classLoader);
 
 		// configure incremental checkpoints
 		this.enableIncrementalCheckpointing = original.enableIncrementalCheckpointing.resolveUndefined(
@@ -395,7 +393,11 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 	 * streams.
 	 */
 	public StateBackend getCheckpointBackend() {
-		return checkpointStreamBackend;
+		if (snapshotStorage instanceof StateBackend) {
+			return (StateBackend) snapshotStorage;
+		}
+
+		throw new RuntimeException("Provided snapshot storage does not implement StateBackend");
 	}
 
 	private void lazyInitializeForJob(
@@ -457,13 +459,16 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 
 	@Override
 	public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) throws IOException {
-		return checkpointStreamBackend.resolveCheckpoint(pointer);
+		return snapshotStorage.resolveCheckpoint(pointer);
 	}
 
 	@Override
 	public CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException {
-		return checkpointStreamBackend.createCheckpointStorage(jobId);
+		return snapshotStorage.createCheckpointStorage(jobId);
 	}
+
+	@Override
+	public void setDefaultSavepointLocation(Path defaultSavepointLocation) { }
 
 	// ------------------------------------------------------------------------
 	//  State holding data structures
@@ -878,7 +883,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 	@Override
 	public String toString() {
 		return "RocksDBStateBackend{" +
-				"checkpointStreamBackend=" + checkpointStreamBackend +
+				"checkpointStreamBackend=" + snapshotStorage +
 				", localRocksDbDirectories=" + Arrays.toString(localRocksDbDirectories) +
 				", enableIncrementalCheckpointing=" + enableIncrementalCheckpointing +
 				", numberOfTransferThreads=" + numberOfTransferThreads +
@@ -955,5 +960,14 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 		final Field initField = org.rocksdb.NativeLibraryLoader.class.getDeclaredField("initialized");
 		initField.setAccessible(true);
 		initField.setBoolean(null, false);
+	}
+
+	private static SnapshotStorage asSnapshotStorage(StateBackend stateBackend) {
+		if (stateBackend instanceof SnapshotStorage) {
+			return (SnapshotStorage) stateBackend;
+		}
+
+		throw new RuntimeException("RocksDBStateBackend can only use state backends that implement " +
+			"SnapshotStorage for its checkpoint storage proxy.");
 	}
 }

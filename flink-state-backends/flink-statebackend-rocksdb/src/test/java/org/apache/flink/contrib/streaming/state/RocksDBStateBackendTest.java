@@ -37,6 +37,7 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.runtime.util.BlockingCheckpointOutputStream;
 import org.apache.flink.util.IOUtils;
@@ -137,6 +138,13 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 		backend = backend.configure(configuration, Thread.currentThread().getContextClassLoader());
 		backend.setDbStoragePath(dbPath);
 		return backend;
+	}
+
+	@Override
+	protected SnapshotStorage getSnapshotStorage() throws Exception {
+		dbPath = tempFolder.newFolder().getAbsolutePath();
+		String checkpointPath = tempFolder.newFolder().toURI().toString();
+		return new FsStateBackend(checkpointPath);
 	}
 
 	@Override

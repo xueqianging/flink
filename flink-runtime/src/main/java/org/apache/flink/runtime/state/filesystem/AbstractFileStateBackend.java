@@ -26,6 +26,7 @@ import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CompletedCheckpointStorageLocation;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 
 import javax.annotation.Nullable;
 
@@ -66,7 +67,7 @@ import java.net.URI;
  * '{@value AbstractFsCheckpointStorage#METADATA_FILE_NAME}'.
  */
 @PublicEvolving
-public abstract class AbstractFileStateBackend extends AbstractStateBackend {
+public abstract class AbstractFileStateBackend extends AbstractStateBackend implements SnapshotStorage {
 
 	private static final long serialVersionUID = 1L;
 
@@ -163,6 +164,11 @@ public abstract class AbstractFileStateBackend extends AbstractStateBackend {
 	@Override
 	public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) throws IOException {
 		return AbstractFsCheckpointStorage.resolveCheckpointPointer(pointer);
+	}
+
+	@Override
+	public void setDefaultSavepointLocation(Path defaultSavepointLocation) {
+		// ignored for backwards compatibility
 	}
 
 	// ------------------------------------------------------------------------

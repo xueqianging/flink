@@ -29,28 +29,20 @@ import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 
 import javax.annotation.Nonnull;
 
-import java.io.IOException;
 import java.util.Collection;
 
 /**
- * A <b>State Backend</b> defines how the state of a streaming application is stored and
- * checkpointed. Different State Backends store their state in different fashions, and use
+ * A <b>State Backend</b> defines how the state of a streaming application is stored.
+ * Different State Backends store their state in different fashions, and use
  * different data structures to hold the state of a running application.
  *
- * <p>For example, the {@link org.apache.flink.runtime.state.memory.MemoryStateBackend memory state backend}
- * keeps working state in the memory of the TaskManager and stores checkpoints in the memory of the
- * JobManager. The backend is lightweight and without additional dependencies, but not highly available
- * and supports only small state.
+ * <p>For example, the {@code org.apache.flink.runtime.state.hashmap.HashMapStateBackend hashmap state backend}
+ * keeps working state in the memory of the TaskManager and is very fast.
+ * 
+ * <p>The {@code EmbeddedRocksDBStateBackend} stores working state in embedded
+ * <a href="http://rocksdb.org/">RocksDB</a> instances and can scale to 100's of terrabytes
+ * of working state within an application.
  *
- * <p>The {@link org.apache.flink.runtime.state.filesystem.FsStateBackend file system state backend}
- * keeps working state in the memory of the TaskManager and stores state checkpoints in a filesystem
- * (typically a replicated highly-available filesystem, like <a href="https://hadoop.apache.org/">HDFS</a>,
- * <a href="https://ceph.com/">Ceph</a>, <a href="https://aws.amazon.com/documentation/s3/">S3</a>,
- * <a href="https://cloud.google.com/storage/">GCS</a>, etc).
- * 
- * <p>The {@code RocksDBStateBackend} stores working state in <a href="http://rocksdb.org/">RocksDB</a>,
- * and checkpoints the state by default to a filesystem (similar to the {@code FsStateBackend}).
- * 
  * <h2>Raw Bytes Storage and Backends</h2>
  * 
  * The {@code StateBackend} creates services for <i>raw bytes storage</i> and for <i>keyed state</i>
@@ -87,39 +79,6 @@ import java.util.Collection;
 @PublicEvolving
 public interface StateBackend extends java.io.Serializable {
 
-	// ------------------------------------------------------------------------
-	//  Checkpoint storage - the durable persistence of checkpoint data
-	// ------------------------------------------------------------------------
-
-	/**
-	 * Resolves the given pointer to a checkpoint/savepoint into a checkpoint location. The location
-	 * supports reading the checkpoint metadata, or disposing the checkpoint storage location.
-	 *
-	 * <p>If the state backend cannot understand the format of the pointer (for example because it
-	 * was created by a different state backend) this method should throw an {@code IOException}.
-	 *
-	 * @param externalPointer The external checkpoint pointer to resolve.
-	 * @return The checkpoint location handle.
-	 *
-	 * @throws IOException Thrown, if the state backend does not understand the pointer, or if
-	 *                     the pointer could not be resolved due to an I/O error.
-	 */
-	CompletedCheckpointStorageLocation resolveCheckpoint(String externalPointer) throws IOException;
-
-	/**
-	 * Creates a storage for checkpoints for the given job. The checkpoint storage is
-	 * used to write checkpoint data and metadata.
-	 *
-	 * @param jobId The job to store checkpoint data for.
-	 * @return A checkpoint storage for the given job.
-	 *
-	 * @throws IOException Thrown if the checkpoint storage cannot be initialized.
-	 */
-	CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException;
-
-	// ------------------------------------------------------------------------
-	//  Structure Backends 
-	// ------------------------------------------------------------------------
 	/**
 	 * Creates a new {@link AbstractKeyedStateBackend} that is responsible for holding <b>keyed state</b>
 	 * and checkpointing it.

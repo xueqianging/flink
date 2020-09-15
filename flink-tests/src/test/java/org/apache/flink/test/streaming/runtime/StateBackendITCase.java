@@ -102,16 +102,6 @@ public class StateBackendITCase extends AbstractTestBase {
 		private static final long serialVersionUID = 1L;
 
 		@Override
-		public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) throws IOException {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException {
-			return new MemoryBackendCheckpointStorage(jobId, null, null, 1_000_000);
-		}
-
-		@Override
 		public <K> AbstractKeyedStateBackend<K> createKeyedStateBackend(
 			Environment env,
 			JobID jobID,

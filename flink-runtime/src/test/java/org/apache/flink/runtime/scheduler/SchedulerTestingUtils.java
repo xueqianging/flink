@@ -70,9 +70,11 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorOperatorEventGateway;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.SerializedValue;
 
 import org.slf4j.Logger;
@@ -191,10 +193,10 @@ public class SchedulerTestingUtils {
 	}
 
 	public static void enableCheckpointing(final JobGraph jobGraph) {
-		enableCheckpointing(jobGraph, null);
+		enableCheckpointing(jobGraph, null, null);
 	}
 
-	public static void enableCheckpointing(final JobGraph jobGraph, @Nullable StateBackend stateBackend) {
+	public static void enableCheckpointing(final JobGraph jobGraph, @Nullable StateBackend stateBackend, @Nullable SnapshotStorage storage) {
 		final List<JobVertexID> triggerVertices = new ArrayList<>();
 		final List<JobVertexID> allVertices = new ArrayList<>();
 
@@ -225,9 +227,20 @@ public class SchedulerTestingUtils {
 			}
 		}
 
+		SerializedValue<SnapshotStorage> serializedSnapshotStorage = null;
+		if (storage != null) {
+			try {
+				serializedSnapshotStorage =
+					new SerializedValue<>(storage);
+			}
+			catch (IOException e) {
+				throw new FlinkRuntimeException("State backend is not serializable", e);
+			}
+		}
+
 		jobGraph.setSnapshotSettings(new JobCheckpointingSettings(
 				triggerVertices, allVertices, allVertices,
-				config, serializedStateBackend));
+				config, serializedStateBackend, serializedSnapshotStorage, null));
 	}
 
 	public static Collection<ExecutionAttemptID> getAllCurrentExecutionAttempts(DefaultScheduler scheduler) {

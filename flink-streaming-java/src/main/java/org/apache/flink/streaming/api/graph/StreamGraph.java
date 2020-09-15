@@ -32,6 +32,7 @@ import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.MissingTypeInfo;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
@@ -112,6 +113,7 @@ public class StreamGraph implements Pipeline {
 	protected Map<Integer, Long> vertexIDtoLoopTimeout;
 	private StateBackend stateBackend;
 	private Set<Tuple2<StreamNode, StreamNode>> iterationSourceSinkPairs;
+	private Path defaultSavepointDir;
 
 	public StreamGraph(ExecutionConfig executionConfig, CheckpointConfig checkpointConfig, SavepointRestoreSettings savepointRestoreSettings) {
 		this.executionConfig = checkNotNull(executionConfig);
@@ -170,6 +172,14 @@ public class StreamGraph implements Pipeline {
 
 	public StateBackend getStateBackend() {
 		return this.stateBackend;
+	}
+
+	public void setDefaultSavepointDir(Path path) {
+		this.defaultSavepointDir = path;
+	}
+
+	public Path getDefaultSavepointDir() {
+		return this.defaultSavepointDir;
 	}
 
 	public ScheduleMode getScheduleMode() {

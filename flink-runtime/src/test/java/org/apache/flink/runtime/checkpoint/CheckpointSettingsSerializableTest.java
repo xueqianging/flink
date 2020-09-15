@@ -22,7 +22,10 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.IllegalConfigurationException;
+import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
@@ -47,6 +50,7 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.testutils.ClassLoaderUtils;
@@ -97,6 +101,7 @@ public class CheckpointSettingsSerializableTest extends TestLogger {
 					false,
 					0),
 				new SerializedValue<StateBackend>(new CustomStateBackend(outOfClassPath)),
+				new SerializedValue<SnapshotStorage>(new CustomSnapshotStorage(outOfClassPath)),
 				serHooks);
 
 		final JobGraph jobGraph = new JobGraph(new JobID(), "test job");
@@ -127,6 +132,7 @@ public class CheckpointSettingsSerializableTest extends TestLogger {
 
 		assertEquals(1, eg.getCheckpointCoordinator().getNumberOfRegisteredMasterHooks());
 		assertTrue(jobGraph.getCheckpointingSettings().getDefaultStateBackend().deserializeValue(classLoader) instanceof CustomStateBackend);
+		assertTrue(jobGraph.getCheckpointingSettings().getDefaultSnapshotStorage().deserializeValue(classLoader) instanceof CustomSnapshotStorage);
 	}
 
 	// ------------------------------------------------------------------------
@@ -150,6 +156,41 @@ public class CheckpointSettingsSerializableTest extends TestLogger {
 		}
 	}
 
+	private static final class CustomSnapshotStorage implements SnapshotStorage {
+
+		private static final long serialVersionUID = -6107964383429397816L;
+
+		/**
+		 * Simulate a custom option that is not in the normal classpath.
+		 */
+		@SuppressWarnings("unused")
+		private Serializable customOption;
+
+		private CustomSnapshotStorage(Serializable customOption) {
+			this.customOption = customOption;
+		}
+
+		@Override
+		public CompletedCheckpointStorageLocation resolveCheckpoint(String externalPointer) throws IOException {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException {
+			return mock(CheckpointStorage.class);
+		}
+
+		@Override
+		public void setDefaultSavepointLocation(Path defaultSavepointLocation) {
+		}
+
+		@Override
+		public SnapshotStorage configure(ReadableConfig config, ClassLoader classLoader) throws IllegalConfigurationException {
+			return this;
+		}
+	}
+
+
 	private static final class CustomStateBackend implements StateBackend {
 
 		private static final long serialVersionUID = -6107964383429395816L;
@@ -161,16 +202,6 @@ public class CheckpointSettingsSerializableTest extends TestLogger {
 
 		public CustomStateBackend(Serializable customOption) {
 			this.customOption = customOption;
-		}
-
-		@Override
-		public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) throws IOException {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException {
-			return mock(CheckpointStorage.class);
 		}
 
 		@Override

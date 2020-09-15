@@ -48,6 +48,7 @@ import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.util.TaskConfig;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.checkpoint.WithMasterCheckpointHook;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
@@ -506,6 +507,8 @@ public class StreamingJobGraphGenerator {
 		final CheckpointConfig checkpointCfg = streamGraph.getCheckpointConfig();
 
 		config.setStateBackend(streamGraph.getStateBackend());
+		config.setSavepointDir(streamGraph.getDefaultSavepointDir());
+		config.setSnapshotStorage(streamGraph.getCheckpointConfig().getCheckpointLocation());
 		config.setCheckpointingEnabled(checkpointCfg.isCheckpointingEnabled());
 		config.setCheckpointMode(getCheckpointingMode(checkpointCfg));
 		config.setUnalignedCheckpointsEnabled(checkpointCfg.isUnalignedCheckpointsEnabled());
@@ -968,6 +971,21 @@ public class StreamingJobGraphGenerator {
 			}
 		}
 
+		// because the snapshot storage can have user-defined code, it needs to be stored as
+		// eagerly serialized value
+		final SerializedValue<SnapshotStorage> serializedSnapshotStorage;
+		if (streamGraph.getCheckpointConfig().getCheckpointLocation() == null) {
+			serializedSnapshotStorage = null;
+		} else {
+			try {
+				serializedSnapshotStorage =
+					new SerializedValue<>(streamGraph.getCheckpointConfig().getCheckpointLocation());
+			}
+			catch (IOException e) {
+				throw new FlinkRuntimeException("State backend is not serializable", e);
+			}
+		}
+
 		//  --- done, put it all together ---
 
 		JobCheckpointingSettings settings = new JobCheckpointingSettings(
@@ -986,6 +1004,7 @@ public class StreamingJobGraphGenerator {
 				.setUnalignedCheckpointsEnabled(cfg.isUnalignedCheckpointsEnabled())
 				.build(),
 			serializedStateBackend,
+			serializedSnapshotStorage,
 			serializedHooks);
 
 		jobGraph.setSnapshotSettings(settings);

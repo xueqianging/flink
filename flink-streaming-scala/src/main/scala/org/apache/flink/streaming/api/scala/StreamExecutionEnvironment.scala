@@ -18,6 +18,8 @@
 
 package org.apache.flink.streaming.api.scala
 
+import java.net.URI
+
 import org.apache.flink.annotation.{Experimental, Internal, Public, PublicEvolving}
 import org.apache.flink.api.common.eventtime.WatermarkStrategy
 import org.apache.flink.api.common.io.{FileInputFormat, FilePathFilter, InputFormat}
@@ -35,8 +37,8 @@ import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceCont
 import org.apache.flink.streaming.api.functions.source._
 import org.apache.flink.streaming.api.{CheckpointingMode, TimeCharacteristic}
 import org.apache.flink.util.SplittableIterator
-
 import com.esotericsoftware.kryo.Serializer
+import org.apache.flink.core.fs.Path
 
 import _root_.scala.language.implicitConversions
 import scala.collection.JavaConverters._
@@ -265,6 +267,47 @@ class StreamExecutionEnvironment(javaEnv: JavaEnv) {
    */
   @PublicEvolving
   def getStateBackend: StateBackend = javaEnv.getStateBackend()
+
+  /**
+   * Sets the default savepoint location for a cluster.
+   *
+   * @param savepointLocation The default savepoint directory to use.
+   * @return This StreamExecutionEnvironment itself, to allow chaining of function calls.
+   */
+  @PublicEvolving
+  def setSavepointLocation(savepointLocation: String): StreamExecutionEnvironment = {
+    javaEnv.setSavepointLocation(savepointLocation)
+    this
+  }
+
+  /**
+   * Sets the default savepoint location for a cluster.
+   *
+   * @param savepointLocation The default savepoint directory to use.
+   * @return This StreamExecutionEnvironment itself, to allow chaining of function calls.
+   */
+  @PublicEvolving
+  def setSavepointLocation(savepointLocation: URI): StreamExecutionEnvironment = {
+    javaEnv.setSavepointLocation(savepointLocation)
+    this
+  }
+
+  /**
+   * Sets the default savepoint location for a cluster.
+   *
+   * @param savepointLocation The default savepoint directory to use.
+   * @return This StreamExecutionEnvironment itself, to allow chaining of function calls.
+   */
+  @PublicEvolving
+  def setSavepointLocation(savepointLocation: Path): StreamExecutionEnvironment = {
+    javaEnv.setSavepointLocation(savepointLocation)
+    this
+  }
+
+	/**
+	 * @return The default savepoint directory to use, or null if none is set.
+	 */
+  @PublicEvolving  def getSavepointLocation: Path =  javaEnv.getSavepointLocation
 
   /**
     * Sets the restart strategy configuration. The configuration specifies which restart strategy

@@ -41,8 +41,8 @@ import org.apache.flink.runtime.state.CheckpointStorageLocation;
 import org.apache.flink.runtime.state.CompletedCheckpointStorageLocation;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.SharedStateRegistryFactory;
-import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
@@ -215,7 +215,7 @@ public class CheckpointCoordinator {
 		Collection<OperatorCoordinatorCheckpointContext> coordinatorsToCheckpoint,
 		CheckpointIDCounter checkpointIDCounter,
 		CompletedCheckpointStore completedCheckpointStore,
-		StateBackend checkpointStateBackend,
+		SnapshotStorage snapshotStorage,
 		Executor executor,
 		ScheduledExecutor timer,
 		SharedStateRegistryFactory sharedStateRegistryFactory,
@@ -230,7 +230,7 @@ public class CheckpointCoordinator {
 			coordinatorsToCheckpoint,
 			checkpointIDCounter,
 			completedCheckpointStore,
-			checkpointStateBackend,
+			snapshotStorage,
 			executor,
 			timer,
 			sharedStateRegistryFactory,
@@ -248,7 +248,7 @@ public class CheckpointCoordinator {
 			Collection<OperatorCoordinatorCheckpointContext> coordinatorsToCheckpoint,
 			CheckpointIDCounter checkpointIDCounter,
 			CompletedCheckpointStore completedCheckpointStore,
-			StateBackend checkpointStateBackend,
+			SnapshotStorage snapshotStorage,
 			Executor executor,
 			ScheduledExecutor timer,
 			SharedStateRegistryFactory sharedStateRegistryFactory,
@@ -256,7 +256,7 @@ public class CheckpointCoordinator {
 			Clock clock) {
 
 		// sanity checks
-		checkNotNull(checkpointStateBackend);
+		checkNotNull(snapshotStorage);
 
 		// max "in between duration" can be one year - this is to prevent numeric overflows
 		long minPauseBetweenCheckpoints = chkConfig.getMinPauseBetweenCheckpoints();
@@ -299,7 +299,7 @@ public class CheckpointCoordinator {
 		this.checkpointProperties = CheckpointProperties.forCheckpoint(chkConfig.getCheckpointRetentionPolicy());
 
 		try {
-			this.checkpointStorage = checkpointStateBackend.createCheckpointStorage(job);
+			this.checkpointStorage = snapshotStorage.createCheckpointStorage(job);
 			checkpointStorage.initializeBaseLocations();
 		} catch (IOException e) {
 			throw new FlinkRuntimeException("Failed to create checkpoint storage at checkpoint coordinator side.", e);

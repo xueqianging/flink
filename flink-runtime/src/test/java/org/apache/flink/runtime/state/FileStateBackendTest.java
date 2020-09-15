@@ -20,6 +20,7 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,6 +52,12 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 
 	@Override
 	protected FsStateBackend getStateBackend() throws Exception {
+		File checkpointPath = tempFolder.newFolder();
+		return new FsStateBackend(checkpointPath.toURI(), useAsyncMode);
+	}
+
+	@Override
+	protected SnapshotStorage getSnapshotStorage() throws Exception {
 		File checkpointPath = tempFolder.newFolder();
 		return new FsStateBackend(checkpointPath.toURI(), useAsyncMode);
 	}

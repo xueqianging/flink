@@ -33,6 +33,8 @@ import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateBackendLoader;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorageLoader;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 
@@ -216,14 +218,14 @@ public class Checkpoints {
 
 	public static void disposeSavepoint(
 			String pointer,
-			StateBackend stateBackend,
+			SnapshotStorage snapshotStorage,
 			ClassLoader classLoader) throws IOException, FlinkException {
 
 		checkNotNull(pointer, "location");
-		checkNotNull(stateBackend, "stateBackend");
+		checkNotNull(snapshotStorage, "snapshotStorage");
 		checkNotNull(classLoader, "classLoader");
 
-		final CompletedCheckpointStorageLocation checkpointLocation = stateBackend.resolveCheckpoint(pointer);
+		final CompletedCheckpointStorageLocation checkpointLocation = snapshotStorage.resolveCheckpoint(pointer);
 
 		final StreamStateHandle metadataHandle = checkpointLocation.getMetadataHandle();
 
@@ -279,15 +281,15 @@ public class Checkpoints {
 		checkNotNull(configuration, "configuration");
 		checkNotNull(classLoader, "classLoader");
 
-		StateBackend backend = loadStateBackend(configuration, classLoader, logger);
+		SnapshotStorage storage = loadSnapshotStorage(configuration, classLoader, logger);
 
-		disposeSavepoint(pointer, backend, classLoader);
+		disposeSavepoint(pointer, storage, classLoader);
 	}
 
 	@Nonnull
-	public static StateBackend loadStateBackend(Configuration configuration, ClassLoader classLoader, @Nullable Logger logger) {
+	public static SnapshotStorage loadSnapshotStorage(Configuration configuration, ClassLoader classLoader, @Nullable Logger logger) {
 		if (logger != null) {
-			logger.info("Attempting to load configured state backend for savepoint disposal");
+			logger.info("Attempting to load configured state backend and snapshot storage for savepoint disposal");
 		}
 
 		StateBackend backend = null;
@@ -307,12 +309,25 @@ public class Checkpoints {
 			}
 		}
 
-		if (backend == null) {
+		SnapshotStorage storage = null;
+		try {
+			storage = SnapshotStorageLoader
+				.fromApplicationOrConfigOrDefault(null, null, backend, configuration, classLoader, null);
+		} catch (Throwable t) {
+			// catches exceptions and errors (like linking errors)
+			if (logger != null) {
+				logger.info("Could not load configured snapshot storage.");
+				logger.debug("Detailed exception:", t);
+			}
+		}
+
+		if (storage == null) {
 			// We use the memory state backend by default. The MemoryStateBackend is actually
 			// FileSystem-based for metadata
-			backend = new MemoryStateBackend();
+			storage = new MemoryStateBackend();
 		}
-		return backend;
+
+		return storage;
 	}
 
 	// ------------------------------------------------------------------------

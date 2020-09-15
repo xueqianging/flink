@@ -67,7 +67,7 @@ import org.apache.flink.runtime.state.CheckpointMetadataOutputStream;
 import org.apache.flink.runtime.state.CheckpointStorageCoordinatorView;
 import org.apache.flink.runtime.state.CheckpointStorageLocation;
 import org.apache.flink.runtime.state.CompletedCheckpointStorageLocation;
-import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
 import org.apache.flink.runtime.testutils.TestingJobGraphStore;
@@ -510,8 +510,8 @@ public class DispatcherTest extends TestLogger {
 
 	@Nonnull
 	private URI createTestingSavepoint() throws IOException, URISyntaxException {
-		final StateBackend stateBackend = Checkpoints.loadStateBackend(configuration, Thread.currentThread().getContextClassLoader(), log);
-		final CheckpointStorageCoordinatorView checkpointStorage = stateBackend.createCheckpointStorage(jobGraph.getJobID());
+		final SnapshotStorage storage = Checkpoints.loadSnapshotStorage(configuration, Thread.currentThread().getContextClassLoader(), log);
+		final CheckpointStorageCoordinatorView checkpointStorage = storage.createCheckpointStorage(jobGraph.getJobID());
 		final File savepointFile = temporaryFolder.newFolder();
 		final long checkpointId = 1L;
 

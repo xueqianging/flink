@@ -34,6 +34,7 @@ import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.internal.InternalKvState;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
@@ -71,9 +72,11 @@ public abstract class StateBackendTestContext {
 
 	protected abstract StateBackend createStateBackend();
 
+	protected abstract SnapshotStorage createSnapshotStorage();
+
 	private CheckpointStreamFactory createCheckpointStreamFactory() {
 		try {
-			return stateBackend
+			return createSnapshotStorage()
 				.createCheckpointStorage(new JobID())
 				.resolveCheckpointStorageLocation(2L, checkpointOptions.getTargetLocation());
 		} catch (IOException e) {

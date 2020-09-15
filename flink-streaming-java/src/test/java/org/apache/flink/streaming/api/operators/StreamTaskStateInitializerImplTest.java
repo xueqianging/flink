@@ -131,15 +131,6 @@ public class StreamTaskStateInitializerImplTest {
 	public void testWithRestore() throws Exception {
 
 		StateBackend mockingBackend = spy(new StateBackend() {
-			@Override
-			public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) throws IOException {
-				throw new UnsupportedOperationException();
-			}
-
-			@Override
-			public CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException {
-				throw new UnsupportedOperationException();
-			}
 
 			@Override
 			public <K> AbstractKeyedStateBackend<K> createKeyedStateBackend(

@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.state.StateBackendMigrationTestBase;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -57,5 +58,11 @@ public class RocksDBStateBackendMigrationTest extends StateBackendMigrationTestB
 		backend = backend.configure(configuration, Thread.currentThread().getContextClassLoader());
 		backend.setDbStoragePath(dbPath);
 		return backend;
+	}
+
+	@Override
+	protected SnapshotStorage getSnapshotStorage() throws Exception {
+		String checkpointPath = tempFolder.newFolder().toURI().toString();
+		return new FsStateBackend(checkpointPath);
 	}
 }

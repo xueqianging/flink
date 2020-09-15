@@ -25,6 +25,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.CheckpointStorageWorkerView;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
+import org.apache.flink.runtime.state.ttl.mock.MockSnapshotStorage;
 import org.apache.flink.runtime.state.ttl.mock.MockStateBackend;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotFutures;
 import org.apache.flink.streaming.api.operators.StreamOperator;
@@ -60,7 +61,7 @@ public class SnapshotUtilsTest {
 	@Test
 	public void testSnapshotUtilsLifecycle() throws Exception {
 		StreamOperator<Void> operator 		= new LifecycleOperator();
-		CheckpointStorageWorkerView storage = new MockStateBackend().createCheckpointStorage(new JobID());
+		CheckpointStorageWorkerView storage = new MockSnapshotStorage().createCheckpointStorage(new JobID());
 
 		Path path = new Path(folder.newFolder().getAbsolutePath());
 

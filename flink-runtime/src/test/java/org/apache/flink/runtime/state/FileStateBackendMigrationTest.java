@@ -18,6 +18,8 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
+
 import java.io.File;
 
 /**
@@ -28,6 +30,12 @@ public class FileStateBackendMigrationTest extends StateBackendMigrationTestBase
 
 	@Override
 	protected FsStateBackend getStateBackend() throws Exception {
+		File checkpointPath = tempFolder.newFolder();
+		return new FsStateBackend(checkpointPath.toURI(), false);
+	}
+
+	@Override
+	protected SnapshotStorage getSnapshotStorage() throws Exception {
 		File checkpointPath = tempFolder.newFolder();
 		return new FsStateBackend(checkpointPath.toURI(), false);
 	}

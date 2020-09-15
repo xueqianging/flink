@@ -52,6 +52,8 @@ import org.apache.flink.runtime.plugable.SerializationDelegate;
 import org.apache.flink.runtime.state.CheckpointStorageWorkerView;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateBackendLoader;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorageLoader;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.runtime.util.FatalExitExceptionHandler;
@@ -293,8 +295,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		this.stateBackend = createStateBackend();
 
+		SnapshotStorage storage = createCheckpointStorage(stateBackend);
 		this.subtaskCheckpointCoordinator = new SubtaskCheckpointCoordinatorImpl(
-			stateBackend.createCheckpointStorage(getEnvironment().getJobID()),
+			storage.createCheckpointStorage(getEnvironment().getJobID()),
 			getName(),
 			actionExecutor,
 			getCancelables(),
@@ -1044,6 +1047,18 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				getEnvironment().getTaskManagerInfo().getConfiguration(),
 				getUserCodeClassLoader(),
 				LOG);
+	}
+
+	private SnapshotStorage createCheckpointStorage(StateBackend backend) throws Exception {
+		final SnapshotStorage fromApplication = configuration.getSnapshotStorage(getUserCodeClassLoader());
+
+		return SnapshotStorageLoader.fromApplicationOrConfigOrDefault(
+			fromApplication,
+			configuration.getSavepointDir(getUserCodeClassLoader()),
+			backend,
+			getEnvironment().getTaskManagerInfo().getConfiguration(),
+			getUserCodeClassLoader(),
+			LOG);
 	}
 
 	/**

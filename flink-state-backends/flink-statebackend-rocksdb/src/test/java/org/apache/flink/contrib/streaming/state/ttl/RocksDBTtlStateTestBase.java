@@ -25,6 +25,7 @@ import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 import org.apache.flink.runtime.state.ttl.StateBackendTestContext;
 import org.apache.flink.runtime.state.ttl.TtlStateTestBase;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
@@ -53,6 +54,18 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 			@Override
 			protected StateBackend createStateBackend() {
 				return RocksDBTtlStateTestBase.this.createStateBackend();
+			}
+
+			@Override
+			protected SnapshotStorage createSnapshotStorage() {
+				String checkpointPath;
+				try {
+					checkpointPath = tempFolder.newFolder().toURI().toString();
+				} catch (IOException e) {
+					throw new FlinkRuntimeException("Failed to init rocksdb test snapshot storage backend");
+				}
+
+				return new FsStateBackend(checkpointPath);
 			}
 		};
 	}

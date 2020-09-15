@@ -20,6 +20,7 @@ package org.apache.flink.runtime.state.ttl;
 
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.snapshot.SnapshotStorage;
 
 /** Test suite for heap state TTL with synchronous snapshotting. */
 public class HeapSyncSnapshotTtlStateTest extends TtlStateTestBase {
@@ -28,6 +29,11 @@ public class HeapSyncSnapshotTtlStateTest extends TtlStateTestBase {
 		return new StateBackendTestContext(timeProvider) {
 			@Override
 			protected StateBackend createStateBackend() {
+				return new MemoryStateBackend(false);
+			}
+
+			@Override
+			protected SnapshotStorage createSnapshotStorage() {
 				return new MemoryStateBackend(false);
 			}
 		};

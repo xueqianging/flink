@@ -37,7 +37,17 @@ public class CheckpointingOptions {
 	public static final ConfigOption<String> STATE_BACKEND = ConfigOptions
 			.key("state.backend")
 			.noDefaultValue()
-			.withDescription("The state backend to be used to store and checkpoint state.");
+			.withDescription("The state backend to be used to store state.");
+
+	/** The snapshot storage to be used to store and checkpoint state. */
+	@Documentation.Section(
+		value = Documentation.Sections.COMMON_STATE_BACKENDS,
+		position = 1)
+	public static final ConfigOption<String> SNAPSHOT_STORAGE = ConfigOptions
+		.key("state.snapshot-storage")
+		.stringType()
+		.noDefaultValue()
+		.withDescription("The snapshot storage to be used to persist checkpoint state.");
 
 	/** The maximum number of completed checkpoints to retain.*/
 	@Documentation.Section(Documentation.Sections.COMMON_STATE_BACKENDS)
@@ -119,6 +129,7 @@ public class CheckpointingOptions {
 		position = 3)
 	public static final ConfigOption<String> SAVEPOINT_DIRECTORY = ConfigOptions
 			.key("state.savepoints.dir")
+			.stringType()
 			.noDefaultValue()
 			.withDeprecatedKeys("savepoints.state.backend.fs.dir")
 			.withDescription("The default directory for savepoints. Used by the state backends that write savepoints to" +

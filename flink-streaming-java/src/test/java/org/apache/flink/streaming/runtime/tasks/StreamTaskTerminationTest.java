@@ -258,16 +258,6 @@ public class StreamTaskTerminationTest extends TestLogger {
 		private static final long serialVersionUID = -5053068148933314100L;
 
 		@Override
-		public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public CheckpointStorage createCheckpointStorage(JobID jobId) throws IOException {
-			return new MemoryBackendCheckpointStorage(jobId, null, null, Integer.MAX_VALUE);
-		}
-
-		@Override
 		public <K> AbstractKeyedStateBackend<K> createKeyedStateBackend(
 			Environment env,
 			JobID jobID,

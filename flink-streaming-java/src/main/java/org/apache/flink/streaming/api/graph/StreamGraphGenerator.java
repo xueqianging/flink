@@ -24,6 +24,7 @@ import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
@@ -114,6 +115,8 @@ public class StreamGraphGenerator {
 
 	private StateBackend stateBackend;
 
+	private Path defaultSavepointDir;
+
 	private boolean chaining = true;
 
 	private ScheduleMode scheduleMode = DEFAULT_SCHEDULE_MODE;
@@ -149,6 +152,11 @@ public class StreamGraphGenerator {
 
 	public StreamGraphGenerator setStateBackend(StateBackend stateBackend) {
 		this.stateBackend = stateBackend;
+		return this;
+	}
+
+	public StreamGraphGenerator setDefaultSavepointDir(Path savepointDir) {
+		this.defaultSavepointDir = savepointDir;
 		return this;
 	}
 
@@ -194,6 +202,7 @@ public class StreamGraphGenerator {
 	public StreamGraph generate() {
 		streamGraph = new StreamGraph(executionConfig, checkpointConfig, savepointRestoreSettings);
 		streamGraph.setStateBackend(stateBackend);
+		streamGraph.setDefaultSavepointDir(defaultSavepointDir);
 		streamGraph.setChaining(chaining);
 		streamGraph.setScheduleMode(scheduleMode);
 		streamGraph.setUserArtifacts(userArtifacts);
