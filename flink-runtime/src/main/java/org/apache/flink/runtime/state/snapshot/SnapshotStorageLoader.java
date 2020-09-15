@@ -24,8 +24,8 @@ import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.filesystem.FsStateBackendFactory;
-import org.apache.flink.runtime.state.memory.MemoryStateBackendFactory;
+import org.apache.flink.runtime.state.snapshot.factory.FileSystemStorageFactory;
+import org.apache.flink.runtime.state.snapshot.factory.JobManagerStorageFactory;
 import org.apache.flink.runtime.state.snapshot.factory.SnapshotStorageFactory;
 import org.apache.flink.util.DynamicCodeLoadingException;
 import org.slf4j.Logger;
@@ -39,6 +39,16 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * This class contains utility methods to load snapshot storages from configurations.
  */
 public class SnapshotStorageLoader {
+
+	// ------------------------------------------------------------------------
+	//  Configuration shortcut names
+	// ------------------------------------------------------------------------
+
+	/** The shortcut configuration name for the JobManagerStorage. */
+	public static final String JOBMANAGER_STORAGE = "jobmanager";
+
+	/** The shortcut configuration name for the FileSystemStorage. */
+	public static final String FS_STORAGE = "filesystem";
 
 	// ------------------------------------------------------------------------
 	//  Loading the snapshot storage from a configuration
@@ -83,6 +93,14 @@ public class SnapshotStorageLoader {
 
 		if (logger != null) {
 			logger.info("Loading snapshot storage via factory {}", storageName);
+		}
+
+		if (JOBMANAGER_STORAGE.equalsIgnoreCase(storageName)) {
+			return new JobManagerStorageFactory().createFromConfig(config, classLoader);
+		}
+
+		if (FS_STORAGE.equalsIgnoreCase(storageName)) {
+			return new FileSystemStorageFactory().createFromConfig(config, classLoader);
 		}
 
 		SnapshotStorageFactory<?> factory;
@@ -172,13 +190,13 @@ public class SnapshotStorageLoader {
 			if (fromConfig != null) {
 				storage = fromConfig;
 			} else if (config.contains(CheckpointingOptions.CHECKPOINTS_DIRECTORY)) {
-				storage = new FsStateBackendFactory().createFromConfig(config, classLoader);
+				storage = new FileSystemStorageFactory().createFromConfig(config, classLoader);
 				if (logger != null) {
 					logger.info("No snapshot storage has been configured, but a checkpoint directory " +
 						"has been provided. Using FileSystem storage {}", storage);
 				}
 			} else {
-				storage = new MemoryStateBackendFactory().createFromConfig(config, classLoader);
+				storage = new JobManagerStorageFactory().createFromConfig(config, classLoader);
 				if (logger != null) {
 					logger.info("No snapshot storage has been configured, using default JobManager {}", storage);
 				}

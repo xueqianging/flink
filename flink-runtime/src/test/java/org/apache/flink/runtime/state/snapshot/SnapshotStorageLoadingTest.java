@@ -23,6 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.Path;
@@ -37,8 +38,8 @@ import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.filesystem.FsStateBackend;
-import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.snapshot.factory.FileSystemStorageFactory;
+import org.apache.flink.runtime.state.snapshot.factory.JobManagerStorageFactory;
 import org.apache.flink.runtime.state.snapshot.factory.SnapshotStorageFactory;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.util.DynamicCodeLoadingException;
@@ -49,6 +50,7 @@ import org.junit.rules.TemporaryFolder;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.net.URI;
 import java.util.Collection;
 
 import static org.hamcrest.CoreMatchers.instanceOf;
@@ -95,7 +97,7 @@ public class SnapshotStorageLoadingTest {
 				cl,
 				null);
 
-		assertThat("wrong snapshot storage loaded", storage, instanceOf(MemoryStateBackend.class));
+		assertThat("wrong snapshot storage loaded", storage, instanceOf(JobManagerStorage.class));
 	}
 
 	@Test
@@ -113,7 +115,7 @@ public class SnapshotStorageLoadingTest {
 				cl,
 				null);
 
-		assertThat("wrong snapshot storage loaded", storage, instanceOf(FsStateBackend.class));
+		assertThat("wrong snapshot storage loaded", storage, instanceOf(FileSystemStorage.class));
 	}
 
 	@Test
@@ -174,7 +176,7 @@ public class SnapshotStorageLoadingTest {
 		// try a value that is neither recognized as a name, nor corresponds to a class
 		config.setString(CheckpointingOptions.SNAPSHOT_STORAGE, "does.not.exist");
 		try {
-			SnapshotStorage storage = SnapshotStorageLoader
+			SnapshotStorageLoader
 				.fromApplicationOrConfigOrDefault(
 					null,
 					null,
@@ -191,7 +193,7 @@ public class SnapshotStorageLoadingTest {
 		// try a class that is not a factory
 		config.setString(CheckpointingOptions.SNAPSHOT_STORAGE, java.io.File.class.getName());
 		try {
-			SnapshotStorage storage = SnapshotStorageLoader
+			SnapshotStorageLoader
 				.fromApplicationOrConfigOrDefault(
 					null,
 					null,
@@ -222,6 +224,238 @@ public class SnapshotStorageLoadingTest {
 			// expected
 		}
 	}
+
+	// ------------------------------------------------------------------------
+	//  JobManager Storage
+	// ------------------------------------------------------------------------
+
+	/**
+	 * Validates loading a job manager snapshot storage from the cluster configuration.
+	 */
+	@Test
+	public void testLoadJobManagerStorageNoParameters() throws Exception {
+		// we configure with the explicit string
+		// to guard against config-breaking changes of the name
+
+		final Configuration config1 = new Configuration();
+		config1.setString(CheckpointingOptions.SNAPSHOT_STORAGE, "jobmanager");
+
+		final Configuration config2 = new Configuration();
+		config2.setString(CheckpointingOptions.SNAPSHOT_STORAGE, JobManagerStorageFactory.class.getName());
+
+		SnapshotStorage storage1 = SnapshotStorageLoader.loadSnapshotStorageFromConfig(config1, cl, null);
+		SnapshotStorage storage2 = SnapshotStorageLoader.loadSnapshotStorageFromConfig(config2, cl, null);
+
+		assertThat("wrong snapshot storage loaded", storage1, instanceOf(JobManagerStorage.class));
+		assertThat("wrong snapshot storage loaded", storage2, instanceOf(JobManagerStorage.class));
+	}
+
+	/**
+	 * Validates loading a job manager snapshot storage with additional parameters from the cluster configuration.
+	 */
+	@Test
+	public void testLoadJobManagerStorageWithParameters() throws Exception {
+		final String checkpointDir = new Path(tmp.newFolder().toURI()).toString();
+		final String savepointDir = new Path(tmp.newFolder().toURI()).toString();
+		final Path expectedCheckpointPath = new Path(checkpointDir);
+		final Path expectedSavepointPath = new Path(savepointDir);
+
+		// we configure with the explicit string
+		// to guard against config-breaking changes of the name
+
+		final Configuration config1 = new Configuration();
+		config1.setString(CheckpointingOptions.SNAPSHOT_STORAGE, "jobmanager");
+		config1.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+		config1.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
+
+		final Configuration config2 = new Configuration();
+		config2.setString(CheckpointingOptions.SNAPSHOT_STORAGE, JobManagerStorageFactory.class.getName());
+		config2.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+		config2.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
+
+		JobManagerStorage storage1 = (JobManagerStorage)
+			SnapshotStorageLoader.loadSnapshotStorageFromConfig(config1, cl, null);
+		JobManagerStorage storage2 = (JobManagerStorage)
+			SnapshotStorageLoader.loadSnapshotStorageFromConfig(config2, cl, null);
+
+		assertNotNull(storage1);
+		assertNotNull(storage2);
+
+		assertEquals(expectedCheckpointPath, storage1.getCheckpointPath());
+		assertEquals(expectedCheckpointPath, storage2.getCheckpointPath());
+		assertEquals(expectedSavepointPath, storage1.getSavepointPath());
+		assertEquals(expectedSavepointPath, storage2.getSavepointPath());
+	}
+
+	/**
+	 * Validates taking the application-defined job manager snapshot storage and adding additional
+	 * parameters from the cluster configuration.
+	 */
+	@Test
+	public void testConfigureJobManagerStorage() throws Exception {
+		final String checkpointDir = new Path(tmp.newFolder().toURI()).toString();
+		final String savepointDir = new Path(tmp.newFolder().toURI()).toString();
+		final Path expectedCheckpointPath = new Path(checkpointDir);
+		final Path expectedSavepointPath = new Path(savepointDir);
+
+		final MemorySize maxSize = MemorySize.ofMebiBytes(1);
+
+		final JobManagerStorage storage = new JobManagerStorage(maxSize);
+
+		final Configuration config = new Configuration();
+		config.setString(CheckpointingOptions.SNAPSHOT_STORAGE, "filesystem"); // check that this is not accidentally picked up
+		config.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+		config.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
+
+		SnapshotStorage loadedStorage = SnapshotStorageLoader
+			.fromApplicationOrConfigOrDefault(
+				storage,
+				null,
+				new ModernStateBackend(),
+				config,
+				cl,
+				null);
+
+		assertThat(loadedStorage, instanceOf(JobManagerStorage.class));
+
+		final JobManagerStorage jmStorage = (JobManagerStorage) loadedStorage;
+		assertEquals(expectedCheckpointPath, jmStorage.getCheckpointPath());
+		assertEquals(expectedSavepointPath, jmStorage.getSavepointPath());
+		assertEquals(maxSize, jmStorage.getMaxStateSize());
+	}
+
+	/**
+	 * Validates taking the application-defined memory state backend and adding additional
+	 * parameters from the cluster configuration, but giving precedence to application-defined
+	 * parameters over configuration-defined parameters.
+	 */
+	@Test
+	public void testConfigureJobManagerStorageMixed() throws Exception {
+		final String appCheckpointDir = new Path(tmp.newFolder().toURI()).toString();
+		final String checkpointDir = new Path(tmp.newFolder().toURI()).toString();
+		final String savepointDir = new Path(tmp.newFolder().toURI()).toString();
+
+		final Path expectedCheckpointPath = new Path(appCheckpointDir);
+		final Path expectedSavepointPath = new Path(savepointDir);
+
+		final JobManagerStorage storage = new JobManagerStorage(appCheckpointDir);
+
+		final Configuration config = new Configuration();
+		config.setString(CheckpointingOptions.SNAPSHOT_STORAGE, "filesystem"); // check that this is not accidentally picked up
+		config.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir); // this parameter should not be picked up
+		config.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
+
+		SnapshotStorage loadedStorage = SnapshotStorageLoader
+			.fromApplicationOrConfigOrDefault(
+				storage,
+				null,
+				new ModernStateBackend(),
+				config,
+				cl,
+				null);
+
+		assertThat(loadedStorage, instanceOf(JobManagerStorage.class));
+
+		final JobManagerStorage jmStorage = (JobManagerStorage) loadedStorage;
+		assertEquals(expectedCheckpointPath, jmStorage.getCheckpointPath());
+		assertEquals(expectedSavepointPath, jmStorage.getSavepointPath());
+	}
+
+	// ------------------------------------------------------------------------
+	//  File System State Backend
+	// ------------------------------------------------------------------------
+
+	/**
+	 * Validates loading a file system storage with additional parameters from the cluster configuration.
+	 */
+	@Test
+	public void testLoadFileSystemStorage() throws Exception {
+		final String checkpointDir = new Path(tmp.newFolder().toURI()).toString();
+		final String savepointDir = new Path(tmp.newFolder().toURI()).toString();
+		final Path expectedCheckpointsPath = new Path(checkpointDir);
+		final Path expectedSavepointsPath = new Path(savepointDir);
+		final MemorySize threshold = MemorySize.parse("900kb");
+		final int minWriteBufferSize = 1024;
+
+		// we configure with the explicit string (rather than AbstractStateBackend#X_STATE_BACKEND_NAME)
+		// to guard against config-breaking changes of the name
+		final Configuration config1 = new Configuration();
+		config1.setString(CheckpointingOptions.SNAPSHOT_STORAGE, "filesystem");
+		config1.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+		config1.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
+		config1.set(CheckpointingOptions.FS_SMALL_FILE_THRESHOLD, threshold);
+		config1.setInteger(CheckpointingOptions.FS_WRITE_BUFFER_SIZE, minWriteBufferSize);
+
+		final Configuration config2 = new Configuration();
+		config2.setString(CheckpointingOptions.SNAPSHOT_STORAGE, FileSystemStorageFactory.class.getName());
+		config2.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir);
+		config2.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
+		config2.set(CheckpointingOptions.FS_SMALL_FILE_THRESHOLD, threshold);
+		config1.setInteger(CheckpointingOptions.FS_WRITE_BUFFER_SIZE, minWriteBufferSize);
+
+		SnapshotStorage storage1 = SnapshotStorageLoader.loadSnapshotStorageFromConfig(config1, cl, null);
+		SnapshotStorage storage2 = SnapshotStorageLoader.loadSnapshotStorageFromConfig(config2, cl, null);
+
+		assertThat(storage1, instanceOf(FileSystemStorage.class));
+		assertThat(storage2, instanceOf(FileSystemStorage.class));
+
+		FileSystemStorage fs1 = (FileSystemStorage) storage1;
+		FileSystemStorage fs2 = (FileSystemStorage) storage2;
+
+		assertEquals(expectedCheckpointsPath, fs1.getCheckpointPath());
+		assertEquals(expectedCheckpointsPath, fs2.getCheckpointPath());
+		assertEquals(expectedSavepointsPath, fs1.getSavepointPath());
+		assertEquals(expectedSavepointsPath, fs2.getSavepointPath());
+		assertEquals(threshold.getBytes(), fs1.getMinFileSizeThreshold());
+		assertEquals(threshold.getBytes(), fs2.getMinFileSizeThreshold());
+		assertEquals(Math.max(threshold.getBytes(), minWriteBufferSize), fs1.getWriteBufferSize());
+		assertEquals(Math.max(threshold.getBytes(), minWriteBufferSize), fs2.getWriteBufferSize());
+	}
+
+	/**
+	 * Validates taking the application-defined file system storage and adding with additional
+	 * parameters from the cluster configuration, but giving precedence to application-defined
+	 * parameters over configuration-defined parameters.
+	 */
+	@Test
+	public void testLoadFileSystemStateBackendMixed() throws Exception {
+		final String appCheckpointDir = new Path(tmp.newFolder().toURI()).toString();
+		final String checkpointDir = new Path(tmp.newFolder().toURI()).toString();
+		final String savepointDir = new Path(tmp.newFolder().toURI()).toString();
+
+		final Path expectedCheckpointsPath = new Path(new URI(appCheckpointDir));
+		final Path expectedSavepointsPath = new Path(savepointDir);
+
+		final MemorySize threshold = new MemorySize(50);
+		final MemorySize writeBufferSize = new MemorySize(60);
+
+		final FileSystemStorage storage = new FileSystemStorage(new URI(appCheckpointDir), threshold, writeBufferSize);
+
+		final Configuration config = new Configuration();
+		config.setString(CheckpointingOptions.SNAPSHOT_STORAGE, "jobmanager"); // this should not be picked up
+		config.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir); // this should not be picked up
+		config.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir);
+		config.set(CheckpointingOptions.FS_SMALL_FILE_THRESHOLD, MemorySize.parse("20")); // this should not be picked up
+		config.setInteger(CheckpointingOptions.FS_WRITE_BUFFER_SIZE, 3000000); // this should not be picked up
+
+		SnapshotStorage loadedStorage = SnapshotStorageLoader
+			.fromApplicationOrConfigOrDefault(
+				storage,
+				null,
+				new ModernStateBackend(),
+				config,
+				cl,
+				null);
+
+		assertThat(loadedStorage, instanceOf(FileSystemStorage.class));
+
+		final FileSystemStorage fs = (FileSystemStorage) loadedStorage;
+		assertEquals(expectedCheckpointsPath, fs.getCheckpointPath());
+		assertEquals(expectedSavepointsPath, fs.getSavepointPath());
+		assertEquals(threshold.getBytes(), fs.getMinFileSizeThreshold());
+		assertEquals(writeBufferSize.getBytes(), fs.getWriteBufferSize());
+	}
+
 
 	/**
 	 * A simple snapshot storage.
