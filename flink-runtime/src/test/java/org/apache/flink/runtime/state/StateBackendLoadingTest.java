@@ -27,6 +27,7 @@ import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackendFactory;
+import org.apache.flink.runtime.state.hashmap.HashMapStateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackendFactory;
 import org.apache.flink.util.DynamicCodeLoadingException;
@@ -65,12 +66,12 @@ public class StateBackendLoadingTest {
     }
 
     @Test
-    public void testInstantiateMemoryBackendByDefault() throws Exception {
+    public void testInstantiateHashMapStateBackendBackendByDefault() throws Exception {
         StateBackend backend =
                 StateBackendLoader.fromApplicationOrConfigOrDefault(
                         null, new Configuration(), cl, null);
 
-        assertTrue(backend instanceof MemoryStateBackend);
+        assertTrue(backend instanceof HashMapStateBackend);
     }
 
     @Test
@@ -426,29 +427,24 @@ public class StateBackendLoadingTest {
                 StateBackendLoader.fromApplicationOrConfigOrDefault(null, config2, cl, null);
 
         assertTrue(loaded1 instanceof MemoryStateBackend);
-        assertTrue(loaded2 instanceof MemoryStateBackend);
+        assertTrue(loaded2 instanceof HashMapStateBackend);
         assertTrue(loaded3 instanceof MemoryStateBackend);
 
         final MemoryStateBackend memBackend1 = (MemoryStateBackend) loaded1;
-        final MemoryStateBackend memBackend2 = (MemoryStateBackend) loaded2;
-        final MemoryStateBackend memBackend3 = (MemoryStateBackend) loaded3;
+        final MemoryStateBackend memBackend2 = (MemoryStateBackend) loaded3;
 
         assertNull(memBackend1.getSavepointPath());
         assertNull(memBackend2.getSavepointPath());
-        assertNull(memBackend3.getSavepointPath());
 
         if (checkpointPath != null) {
             assertNotNull(memBackend1.getCheckpointPath());
             assertNotNull(memBackend2.getCheckpointPath());
-            assertNotNull(memBackend3.getCheckpointPath());
 
             assertEquals(checkpointPath, memBackend1.getCheckpointPath());
             assertEquals(checkpointPath, memBackend2.getCheckpointPath());
-            assertEquals(checkpointPath, memBackend3.getCheckpointPath());
         } else {
             assertNull(memBackend1.getCheckpointPath());
             assertNull(memBackend2.getCheckpointPath());
-            assertNull(memBackend3.getCheckpointPath());
         }
     }
 

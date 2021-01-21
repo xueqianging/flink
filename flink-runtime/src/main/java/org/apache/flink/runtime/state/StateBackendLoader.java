@@ -25,6 +25,8 @@ import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackendFactory;
+import org.apache.flink.runtime.state.hashmap.HashMapStateBackend;
+import org.apache.flink.runtime.state.hashmap.HashMapStateBackendFactory;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackendFactory;
 import org.apache.flink.util.DynamicCodeLoadingException;
@@ -46,6 +48,9 @@ public class StateBackendLoader {
     // ------------------------------------------------------------------------
     //  Configuration shortcut names
     // ------------------------------------------------------------------------
+
+    /** The shortcut configuration name of the HashMap state backend */
+    public static final String HASHMAP_STATE_BACKEND_NAME = "hashmap";
 
     /**
      * The shortcut configuration name for the MemoryState backend that checkpoints to the
@@ -103,6 +108,14 @@ public class StateBackendLoader {
         String factoryClassName = backendName;
 
         switch (backendName.toLowerCase()) {
+            case HASHMAP_STATE_BACKEND_NAME:
+                HashMapStateBackend hashMapStateBackend =
+                        new HashMapStateBackendFactory().createFromConfig(config, classLoader);
+                if (logger != null) {
+                    logger.info("State backend is set to heap memory {}", hashMapStateBackend);
+                }
+                return hashMapStateBackend;
+
             case MEMORY_STATE_BACKEND_NAME:
                 MemoryStateBackend memBackend =
                         new MemoryStateBackendFactory().createFromConfig(config, classLoader);
@@ -131,7 +144,7 @@ public class StateBackendLoader {
 
             case ROCKSDB_STATE_BACKEND_NAME:
                 factoryClassName =
-                        "org.apache.flink.contrib.streaming.state.RocksDBStateBackendFactory";
+                        "org.apache.flink.contrib.streaming.state.EmbeddedRocksDBStateBackendFactory";
                 // fall through to the 'default' case that uses reflection to load the backend
                 // that way we can keep RocksDB in a separate module
 
@@ -170,7 +183,7 @@ public class StateBackendLoader {
      * Checks if an application-defined state backend is given, and if not, loads the state backend
      * from the configuration, from the parameter 'state.backend', as defined in {@link
      * CheckpointingOptions#STATE_BACKEND}. If no state backend is configured, this instantiates the
-     * default state backend (the {@link MemoryStateBackend}).
+     * default state backend (the {@link HashMapStateBackend}).
      *
      * <p>If an application-defined state backend is found, and the state backend is a {@link
      * ConfigurableStateBackend}, this methods calls {@link
@@ -230,10 +243,10 @@ public class StateBackendLoader {
                 backend = fromConfig;
             } else {
                 // (3) use the default
-                backend = new MemoryStateBackendFactory().createFromConfig(config, classLoader);
+                backend = new HashMapStateBackendFactory().createFromConfig(config, classLoader);
                 if (logger != null) {
                     logger.info(
-                            "No state backend has been configured, using default (Memory / JobManager) {}",
+                            "No state backend has been configured, using default (HashMap) {}",
                             backend);
                 }
             }
