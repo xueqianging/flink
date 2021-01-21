@@ -28,6 +28,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ExecutionOptions;
 import org.apache.flink.configuration.ReadableConfig;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.state.CheckpointStorage;
@@ -137,6 +138,8 @@ public class StreamGraphGenerator {
 
     private final ReadableConfig configuration;
 
+    private Path savepointDir;
+
     private StateBackend stateBackend;
 
     private CheckpointStorage checkpointStorage;
@@ -227,6 +230,11 @@ public class StreamGraphGenerator {
         return this;
     }
 
+    public StreamGraphGenerator setSavepointDir(Path savepointDir) {
+        this.savepointDir = savepointDir;
+        return this;
+    }
+
     public StreamGraphGenerator setStateBackend(StateBackend stateBackend) {
         this.stateBackend = stateBackend;
         return this;
@@ -305,6 +313,7 @@ public class StreamGraphGenerator {
         } else {
             graph.setStateBackend(stateBackend);
             graph.setCheckpointStorage(checkpointStorage);
+            graph.setSavepointDirectory(savepointDir);
             graph.setScheduleMode(ScheduleMode.EAGER);
 
             if (checkpointConfig.isApproximateLocalRecoveryEnabled()) {
