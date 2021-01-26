@@ -19,6 +19,8 @@
 package org.apache.flink.configuration;
 
 import org.apache.flink.annotation.docs.Documentation;
+import org.apache.flink.configuration.description.Description;
+import org.apache.flink.configuration.description.TextElement;
 
 /** A collection of all configuration options that relate to checkpoints and savepoints. */
 public class CheckpointingOptions {
@@ -27,20 +29,71 @@ public class CheckpointingOptions {
     //  general checkpoint and state backend options
     // ------------------------------------------------------------------------
 
-    /** The state backend to be used to store and checkpoint state. */
+
+    /**
+     * The checkpoint storage used to store state.
+     *
+     * <p>The implementation can be specified either via their shortcut name, or via the class name
+     * of a {@code StateBackendFactory}. If a StateBackendFactory class name is specified, the
+     * factory is instantiated (via its zero-argument constructor) and its {@code
+     * StateBackendFactory#createFromConfig(ReadableConfig, ClassLoader)} method is called.
+     *
+     * <p>Recognized shortcut names are 'hashmap' and 'rocksdb'.
+     */
     @Documentation.Section(value = Documentation.Sections.COMMON_STATE_BACKENDS, position = 1)
     public static final ConfigOption<String> STATE_BACKEND =
             ConfigOptions.key("state.backend")
+                    .stringType()
                     .noDefaultValue()
-                    .withDescription("The state backend to be used to store state.");
+                    .withDescription(
+                            Description.builder()
+                                    .text("The state backend to be used to store state.")
+                                    .linebreak()
+                                    .text(
+                                            "The implementation can be specified either via their shortcut "
+                                                    + " name, or via the class name of a %s. "
+                                                    + "If a factory is specified it is instantiated via its "
+                                                    + "zero argument constructor and its %s "
+                                                    + "method is called.",
+                                            TextElement.code("StateBackendFactory"),
+                                            TextElement.code(
+                                                    "StateBackendFactory#createFromConfig(ReadableConfig, ClassLoader)"))
+                                    .linebreak()
+                                    .text("Recognized shortcut names are 'hashmap' and 'rocksdb'.")
+                                    .build());
 
-    /** The checkpoint storage used to checkpoint state. */
+    /**
+     * The checkpoint storage used to checkpoint state.
+     *
+     * <p>The implementation can be specified either via their shortcut name, or via the class name
+     * of a {@code CheckpointStorageFactory}. If a CheckpointStorageFactory class name is specified,
+     * the factory is instantiated (via its zero-argument constructor) and its {@code
+     * CheckpointStorageFactory#createFromConfig(ReadableConfig, ClassLoader)} method is called.
+     *
+     * <p>Recognized shortcut names are 'jobmanager' and 'filesystem'.
+     */
     @Documentation.Section(value = Documentation.Sections.COMMON_STATE_BACKENDS, position = 2)
     public static final ConfigOption<String> CHECKPOINT_STORAGE =
             ConfigOptions.key("state.checkpoint-storage")
                     .stringType()
                     .noDefaultValue()
-                    .withDescription("The checkpoint storage to be used to checkpoint state.");
+                    .withDescription(
+                            Description.builder()
+                                    .text("The checkpoint storage to be used to checkpoint state.")
+                                    .linebreak()
+                                    .text(
+                                            "The implementation can be specified either via their shortcut "
+                                                    + " name, or via the class name of a %s. "
+                                                    + "If a factory is specified it is instantiated via its "
+                                                    + "zero argument constructor and its %s "
+                                                    + " method is called.",
+                                            TextElement.code("CheckpointStorageFactory"),
+                                            TextElement.code(
+                                                    "CheckpointStorageFactory#createFromConfig(ReadableConfig, ClassLoader)"))
+                                    .linebreak()
+                                    .text(
+                                            "Recognized shortcut names are 'jobmanager' and 'filesystem'.")
+                                    .build());
 
     /** The maximum number of completed checkpoints to retain. */
     @Documentation.Section(Documentation.Sections.COMMON_STATE_BACKENDS)
