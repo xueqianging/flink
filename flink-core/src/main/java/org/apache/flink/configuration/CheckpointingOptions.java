@@ -62,8 +62,7 @@ public class CheckpointingOptions {
                                     .text("Recognized shortcut names are 'hashmap' and 'rocksdb'.")
                                     .build());
 
-    /**
-     * The checkpoint storage used to checkpoint state.
+    /** The checkpoint storage used to checkpoint state.
      *
      * <p>The implementation can be specified either via their shortcut name, or via the class name
      * of a {@code CheckpointStorageFactory}. If a CheckpointStorageFactory class name is specified,
@@ -196,6 +195,7 @@ public class CheckpointingOptions {
     @Documentation.Section(value = Documentation.Sections.COMMON_STATE_BACKENDS, position = 2)
     public static final ConfigOption<String> CHECKPOINTS_DIRECTORY =
             ConfigOptions.key("state.checkpoints.dir")
+                    .stringType()
                     .noDefaultValue()
                     .withDeprecatedKeys("state.backend.fs.checkpointdir")
                     .withDescription(
