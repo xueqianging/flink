@@ -34,6 +34,8 @@ class BatchExecutionKeyReducingState<K, N, T>
         implements InternalReducingState<K, N, T> {
     private final ReduceFunction<T> reduceFunction;
 
+    private InternalReducingState<K, N, T> inner;
+
     public BatchExecutionKeyReducingState(
             T defaultValue,
             ReduceFunction<T> reduceFunction,
@@ -66,6 +68,17 @@ class BatchExecutionKeyReducingState<K, N, T>
         } catch (Exception e) {
             throw new IOException("Exception while applying ReduceFunction in reducing state", e);
         }
+    }
+
+    @Override
+    protected void flush(N namespace, T value) throws Exception {
+        inner.setCurrentNamespace(namespace);
+        inner.add(value);
+    }
+
+    @Override
+    void setInner(Object inner) {
+        this.inner = (InternalReducingState<K, N, T>) inner;
     }
 
     @SuppressWarnings("unchecked")

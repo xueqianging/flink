@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.operators.sorted.state;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 
 import java.util.HashMap;
@@ -54,6 +55,20 @@ abstract class AbstractBatchExecutionKeyState<K, N, V> implements InternalKvStat
         }
         return currentNamespaceValue;
     }
+
+    public void flush() throws Exception {
+        if (currentNamespaceValue != null) {
+            flush(currentNamespace, currentNamespaceValue);
+        }
+
+        for (Map.Entry<N, V> entry : valuesForNamespaces.entrySet()) {
+            flush(entry.getKey(), entry.getValue());
+        }
+    }
+
+    protected abstract void flush(N namespace, V value) throws Exception;
+
+    abstract void setInner(Object inner);
 
     public V getCurrentNamespaceValue() {
         return currentNamespaceValue;
@@ -119,7 +134,7 @@ abstract class AbstractBatchExecutionKeyState<K, N, V> implements InternalKvStat
 
     void clearAllNamespaces() {
         currentNamespaceValue = null;
-        currentNamespace = null;
+        currentNamespace = (N) VoidNamespace.INSTANCE;
         valuesForNamespaces.clear();
     }
 }

@@ -34,6 +34,8 @@ class BatchExecutionKeyListState<K, N, T>
         extends MergingAbstractBatchExecutionKeyState<K, N, List<T>, T, Iterable<T>>
         implements InternalListState<K, N, T> {
 
+    private InternalListState<K, N, T> inner;
+
     protected BatchExecutionKeyListState(
             List<T> defaultValue,
             TypeSerializer<K> keySerializer,
@@ -77,6 +79,17 @@ class BatchExecutionKeyListState<K, N, T>
     @Override
     public Iterable<T> get() throws Exception {
         return getCurrentNamespaceValue();
+    }
+
+    @Override
+    protected void flush(N namespace, List<T> value) throws Exception {
+        inner.setCurrentNamespace(namespace);
+        inner.addAll(value);
+    }
+
+    @Override
+    void setInner(Object inner) {
+        this.inner = (InternalListState<K, N, T>) inner;
     }
 
     @SuppressWarnings("unchecked")

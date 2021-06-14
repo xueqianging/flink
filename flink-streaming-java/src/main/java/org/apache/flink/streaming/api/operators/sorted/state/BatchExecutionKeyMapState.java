@@ -34,6 +34,8 @@ class BatchExecutionKeyMapState<K, N, UK, UV>
         extends AbstractBatchExecutionKeyState<K, N, Map<UK, UV>>
         implements InternalMapState<K, N, UK, UV> {
 
+    private InternalMapState<K, N, UK, UV> inner;
+
     protected BatchExecutionKeyMapState(
             Map<UK, UV> defaultValue,
             TypeSerializer<K> keySerializer,
@@ -115,6 +117,17 @@ class BatchExecutionKeyMapState<K, N, UK, UV>
     @Override
     public boolean isEmpty() {
         return getCurrentNamespaceValue() == null || getCurrentNamespaceValue().isEmpty();
+    }
+
+    @Override
+    protected void flush(N namespace, Map<UK, UV> value) throws Exception {
+        inner.setCurrentNamespace(namespace);
+        inner.putAll(value);
+    }
+
+    @Override
+    void setInner(Object inner) {
+        this.inner = (InternalMapState<K, N, UK, UV>) inner;
     }
 
     @SuppressWarnings("unchecked")

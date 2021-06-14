@@ -28,6 +28,8 @@ import org.apache.flink.runtime.state.internal.InternalValueState;
 class BatchExecutionKeyValueState<K, N, T> extends AbstractBatchExecutionKeyState<K, N, T>
         implements InternalValueState<K, N, T> {
 
+    private InternalValueState<K, N, T> inner;
+
     BatchExecutionKeyValueState(
             T defaultValue,
             TypeSerializer<K> keySerializer,
@@ -44,6 +46,17 @@ class BatchExecutionKeyValueState<K, N, T> extends AbstractBatchExecutionKeyStat
     @Override
     public void update(T value) {
         setCurrentNamespaceValue(value);
+    }
+
+    @Override
+    protected void flush(N namespace, T value) throws Exception {
+        inner.setCurrentNamespace(namespace);
+        inner.update(value);
+    }
+
+    @Override
+    void setInner(Object inner) {
+        this.inner = (InternalValueState<K, N, T>) inner;
     }
 
     @SuppressWarnings("unchecked")

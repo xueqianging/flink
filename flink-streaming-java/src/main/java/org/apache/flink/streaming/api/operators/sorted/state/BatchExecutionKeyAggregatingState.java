@@ -35,6 +35,8 @@ class BatchExecutionKeyAggregatingState<K, N, IN, ACC, OUT>
 
     private final AggregateFunction<IN, ACC, OUT> aggFunction;
 
+    private InternalAggregatingState<K, N, IN, ACC, OUT> inner;
+
     public BatchExecutionKeyAggregatingState(
             ACC defaultValue,
             AggregateFunction<IN, ACC, OUT> aggregateFunction,
@@ -67,6 +69,17 @@ class BatchExecutionKeyAggregatingState<K, N, IN, ACC, OUT>
             throw new IOException(
                     "Exception while applying AggregateFunction in aggregating state", e);
         }
+    }
+
+    @Override
+    protected void flush(N namespace, ACC value) throws Exception {
+        inner.setCurrentNamespace(namespace);
+        inner.updateInternal(value);
+    }
+
+    @Override
+    void setInner(Object inner) {
+        this.inner = (InternalAggregatingState<K, N, IN, ACC, OUT>) inner;
     }
 
     @SuppressWarnings("unchecked")

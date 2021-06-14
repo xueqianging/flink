@@ -20,11 +20,14 @@ package org.apache.flink.streaming.api.operators.sorted.state;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.configuration.IllegalConfigurationException;
+import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.CheckpointableKeyedStateBackend;
+import org.apache.flink.runtime.state.ConfigurableStateBackend;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackendBuilder;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
@@ -32,13 +35,44 @@ import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
+import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.util.Collection;
 
 /** A simple {@link StateBackend} which is used in a BATCH style execution. */
-public class BatchExecutionStateBackend implements StateBackend {
+public class BatchExecutionStateBackend implements ConfigurableStateBackend, StateBackend {
+
+    @Nullable private final StateBackend persistent;
+
+    public BatchExecutionStateBackend() {
+        this.persistent = null;
+    }
+
+    public BatchExecutionStateBackend(@Nonnull StateBackend persistent) {
+        Preconditions.checkNotNull(persistent, "persistent state backend cannot be null");
+        this.persistent = persistent;
+    }
+
+    @Override
+    public StateBackend configure(ReadableConfig config, ClassLoader classLoader)
+            throws IllegalConfigurationException {
+
+        if (persistent instanceof ConfigurableStateBackend) {
+            StateBackend configured =
+                    ((ConfigurableStateBackend) persistent).configure(config, classLoader);
+            return new BatchExecutionStateBackend(configured);
+        }
+
+        return this;
+    }
+
+    @Override
+    public boolean useManagedMemory() {
+        return persistent != null && persistent.useManagedMemory();
+    }
 
     @Override
     public <K> CheckpointableKeyedStateBackend<K> createKeyedStateBackend(
@@ -52,8 +86,27 @@ public class BatchExecutionStateBackend implements StateBackend {
             TtlTimeProvider ttlTimeProvider,
             MetricGroup metricGroup,
             @Nonnull Collection<KeyedStateHandle> stateHandles,
-            CloseableRegistry cancelStreamRegistry) {
-        return new BatchExecutionKeyedStateBackend<>(keySerializer, keyGroupRange);
+            CloseableRegistry cancelStreamRegistry)
+            throws Exception {
+
+        CheckpointableKeyedStateBackend<K> persistentStorage = null;
+        if (persistent != null) {
+            persistentStorage =
+                    persistent.createKeyedStateBackend(
+                            env,
+                            jobID,
+                            operatorIdentifier,
+                            keySerializer,
+                            numberOfKeyGroups,
+                            keyGroupRange,
+                            kvStateRegistry,
+                            ttlTimeProvider,
+                            metricGroup,
+                            stateHandles,
+                            cancelStreamRegistry);
+        }
+        return new BatchExecutionKeyedStateBackend<>(
+                keySerializer, keyGroupRange, persistentStorage);
     }
 
     @Override

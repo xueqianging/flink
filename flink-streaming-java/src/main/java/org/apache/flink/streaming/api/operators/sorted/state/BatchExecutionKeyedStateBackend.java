@@ -39,6 +39,7 @@ import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.PriorityComparable;
 import org.apache.flink.runtime.state.PriorityComparator;
 import org.apache.flink.runtime.state.SavepointResources;
+import org.apache.flink.runtime.state.SnapshotExecutionType;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StateSnapshotTransformer;
 import org.apache.flink.runtime.state.heap.HeapPriorityQueueElement;
@@ -49,6 +50,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -99,25 +101,52 @@ public class BatchExecutionKeyedStateBackend<K> implements CheckpointableKeyedSt
     private final Map<String, KeyGroupedInternalPriorityQueue<?>> priorityQueues = new HashMap<>();
     private final KeyGroupRange keyGroupRange;
 
+    @Nullable private CheckpointableKeyedStateBackend<K> persistentBackend;
+
     public BatchExecutionKeyedStateBackend(
             TypeSerializer<K> keySerializer, KeyGroupRange keyGroupRange) {
         this.keySerializer = keySerializer;
         this.keyGroupRange = keyGroupRange;
+        this.persistentBackend = null;
+    }
+
+    public BatchExecutionKeyedStateBackend(
+            TypeSerializer<K> keySerializer,
+            KeyGroupRange keyGroupRange,
+            @Nullable CheckpointableKeyedStateBackend<K> persistentBackend) {
+        this.keySerializer = keySerializer;
+        this.keyGroupRange = keyGroupRange;
+        this.persistentBackend = persistentBackend;
     }
 
     @Override
     public void setCurrentKey(K newKey) {
         if (!Objects.equals(newKey, currentKey)) {
             notifyKeySelected(newKey);
-            for (State value : states.values()) {
-                ((AbstractBatchExecutionKeyState<?, ?, ?>) value).clearAllNamespaces();
+            flushAndReset();
+            this.currentKey = newKey;
+            if (persistentBackend != null) {
+                persistentBackend.setCurrentKey(newKey);
             }
-            for (KeyGroupedInternalPriorityQueue<?> value : priorityQueues.values()) {
-                while (value.poll() != null) {
-                    // remove everything for the key
+        }
+    }
+
+    private void flushAndReset() {
+        for (State value : states.values()) {
+            if (persistentBackend != null) {
+                try {
+                    ((AbstractBatchExecutionKeyState<?, ?, ?>) value).flush();
+                } catch (Exception e) {
+                    throw new RuntimeException(
+                            "failed to flush records to persistent state backend", e);
                 }
             }
-            this.currentKey = newKey;
+            ((AbstractBatchExecutionKeyState<?, ?, ?>) value).clearAllNamespaces();
+        }
+        for (KeyGroupedInternalPriorityQueue<?> value : priorityQueues.values()) {
+            while (value.poll() != null) {
+                // remove everything for the key
+            }
         }
     }
 
@@ -193,6 +222,13 @@ public class BatchExecutionKeyedStateBackend<K> implements CheckpointableKeyedSt
             throws Exception {
         S state = getOrCreateKeyedState(namespaceSerializer, stateDescriptor);
         ((InternalKvState<K, N, ?>) state).setCurrentNamespace(namespace);
+
+        if (persistentBackend != null) {
+            Object inner =
+                    persistentBackend.getOrCreateKeyedState(namespaceSerializer, stateDescriptor);
+            ((AbstractBatchExecutionKeyState<K, N, ?>) state).setInner(inner);
+        }
+
         return state;
     }
 
@@ -225,7 +261,8 @@ public class BatchExecutionKeyedStateBackend<K> implements CheckpointableKeyedSt
                     StateSnapshotTransformer.StateSnapshotTransformFactory<SEV>
                             snapshotTransformFactory)
             throws Exception {
-        return createState(namespaceSerializer, stateDesc);
+        IS state = createState(namespaceSerializer, stateDesc);
+        return state;
     }
 
     private <N, SV, S extends State, IS extends S> IS createState(
@@ -282,6 +319,14 @@ public class BatchExecutionKeyedStateBackend<K> implements CheckpointableKeyedSt
     @Nonnull
     @Override
     public SavepointResources<K> savepoint() throws Exception {
+        if (persistentBackend != null) {
+            flushAndReset();
+            // savepoints must run synchronously to keep the
+            // task alive while the savepoint completes.
+            SavepointResources<K> resource = persistentBackend.savepoint();
+            return new SavepointResources<>(
+                    resource.getSnapshotResources(), SnapshotExecutionType.SYNCHRONOUS);
+        }
         throw new UnsupportedOperationException(
                 "Savepoints are not supported in BATCH runtime mode.");
     }
