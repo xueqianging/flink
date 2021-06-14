@@ -38,6 +38,11 @@ public class ExecutionOptions {
                             "Runtime execution mode of DataStream programs. Among other things, "
                                     + "this controls task scheduling, network shuffle behavior, and time semantics.");
 
+    public static final ConfigOption<Boolean> BOOTSTRAP_MODE =
+            ConfigOptions.key("execution.boostrap")
+                .booleanType()
+                .defaultValue(false);
+
     /**
      * Should be moved to {@code ExecutionCheckpointingOptions} along with {@code
      * ExecutionConfig#useSnapshotCompression}, which should be put into {@code CheckpointConfig}.

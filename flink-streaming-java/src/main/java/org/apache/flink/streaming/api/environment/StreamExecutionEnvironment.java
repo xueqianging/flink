@@ -55,6 +55,7 @@ import org.apache.flink.configuration.ExecutionOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.core.execution.DefaultExecutorServiceLoader;
 import org.apache.flink.core.execution.DetachedJobExecutionResult;
 import org.apache.flink.core.execution.JobClient;
@@ -2021,6 +2022,11 @@ public class StreamExecutionEnvironment {
         }
 
         final RuntimeExecutionMode executionMode = configuration.get(ExecutionOptions.RUNTIME_MODE);
+        final boolean boostrap = configuration.get(ExecutionOptions.BOOTSTRAP_MODE);
+        if (boostrap) {
+            // Hacky
+            configuration.set(StateBackendOptions.STATE_BACKEND, "org.apache.flink.streaming.api.operators.sorted.state.BootstrapStateBackendFactory");
+        }
 
         return new StreamGraphGenerator(transformations, config, checkpointCfg, getConfiguration())
                 .setRuntimeExecutionMode(executionMode)

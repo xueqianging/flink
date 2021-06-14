@@ -370,11 +370,18 @@ public class StreamGraphGenerator {
     private void setBatchStateBackendAndTimerService(StreamGraph graph) {
         boolean useStateBackend = configuration.get(ExecutionOptions.USE_BATCH_STATE_BACKEND);
         boolean sortInputs = configuration.get(ExecutionOptions.SORT_INPUTS);
+        boolean boostrap = configuration.get(ExecutionOptions.BOOTSTRAP_MODE);
+
         checkState(
                 !useStateBackend || sortInputs,
                 "Batch state backend requires the sorted inputs to be enabled!");
 
-        if (useStateBackend) {
+        if (boostrap) {
+            LOG.debug("Using BATCH execution in Boostrap Mode");
+
+            graph.setCheckpointStorage(new BatchExecutionCheckpointStorage());
+            graph.setTimerServiceProvider(BatchExecutionInternalTimeServiceManager::create);
+        } else if (useStateBackend) {
             LOG.debug("Using BATCH execution state backend and timer service.");
             graph.setStateBackend(new BatchExecutionStateBackend());
             graph.setCheckpointStorage(new BatchExecutionCheckpointStorage());
